@@ -28,7 +28,7 @@ Thumbs.db
 # Runtime data
 .cache/
 .chromadb/
-output/
+/output/
 tempvideo/
 
 # Testing
