@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Analyzer</title>
+<style>
+:root {
+  --bg: #0f0f0f;
+  --card: #1a1a1a;
+  --border: #2a2a2a;
+  --text: #e0e0e0;
+  --muted: #888;
+  --accent: #00b894;
+  --accent-hover: #00a381;
+  --danger: #e74c3c;
+  --success: #27ae60;
+  --radius: 8px;
+  --sidebar-w: 230px;
+}
+[data-theme="light"] {
+  --bg: #f5f6fa;
+  --card: #ffffff;
+  --border: #dcdde1;
+  --text: #2d3436;
+  --muted: #636e72;
+  --accent: #00b894;
+  --accent-hover: #00a381;
+  --danger: #c0392b;
+  --success: #27ae60;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; }
+
+/* ── Sidebar ──────────────────────── */
+#sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 12px; overflow: hidden; transition: width 0.25s, min-width 0.25s, padding 0.25s; }
+#sidebar.collapsed { width: 0; min-width: 0; padding: 16px 0; border-right: none; }
+#sidebar h2 { font-size: 0.95rem; color: var(--accent); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; white-space: nowrap; }
+#sidebar h2 button { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); cursor: pointer; font-size: 0.7rem; padding: 2px 6px; }
+#sidebar h2 button:hover { border-color: var(--accent); color: var(--accent); }
+#historyList { flex: 1; overflow-y: auto; min-width: 200px; }
+#sidebarToggle { position: fixed; left: calc(var(--sidebar-w) - 14px); top: 20px; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--muted); cursor: pointer; font-size: 0.7rem; z-index: 10; display: flex; align-items: center; justify-content: center; transition: left 0.25s; }
+#sidebar.collapsed + #sidebarToggle { left: 0; top: 60px; }
+.history-item { padding: 10px 8px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; transition: background 0.15s; }
+.history-item:hover { background: var(--border); }
+.history-item.active { background: var(--accent); color: #fff; }
+.history-item .hi-title { font-size: 0.82rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+.history-item .hi-time { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+.history-item.active .hi-time { color: rgba(255,255,255,0.7); }
+
+/* ── Main ─────────────────────────── */
+#main { flex: 1; padding: 24px 20px; overflow-y: auto; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.header h1 { font-size: 1.5rem; color: var(--accent); }
+#themeToggle { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text); cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; }
+#themeToggle:hover { border-color: var(--accent); }
+.input-box { display: flex; gap: 12px; margin-bottom: 20px; }
+.input-box input { flex: 1; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 1rem; outline: none; }
+.input-box input:focus { border-color: var(--accent); }
+.input-box button { padding: 12px 24px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; font-size: 1rem; white-space: nowrap; }
+.input-box button:hover { background: var(--accent-hover); }
+.input-box button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Progress ─────────────────────── */
+#progress { margin-bottom: 20px; min-height: 76px; }
+#statusLine { font-size: 0.9rem; color: var(--accent); font-weight: 600; padding: 4px 0; }
+.bar-row { display: none; align-items: center; gap: 10px; padding: 3px 0; font-size: 0.82rem; color: var(--muted); }
+.bar-row.show { display: flex; }
+.bar-row span:first-child { min-width: 56px; }
+.bar-row span:last-child { min-width: 36px; text-align: right; }
+.bar-row progress { flex: 1; height: 8px; border-radius: 4px; background: var(--border); border: none; }
+.bar-row progress::-webkit-progress-bar { background: var(--border); border-radius: 4px; }
+.bar-row progress::-webkit-progress-value { background: var(--accent); border-radius: 4px; }
+.bar-row progress::-moz-progress-bar { background: var(--accent); border-radius: 4px; }
+
+/* ── Error ────────────────────────── */
+.error { background: #2d1111; border: 1px solid var(--danger); border-radius: var(--radius); padding: 16px; margin-bottom: 24px; color: #f88; display: none; }
+
+/* ── Result ───────────────────────── */
+.result { display: none; }
+.result.show { display: block; }
+.hero { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; display: flex; gap: 16px; align-items: flex-start; }
+.hero img { width: 160px; height: 90px; object-fit: cover; border-radius: 4px; background: var(--border); }
+.hero .meta h2 { font-size: 1.1rem; margin-bottom: 6px; }
+.hero .meta p { color: var(--muted); font-size: 0.82rem; margin-bottom: 2px; }
+.hero .meta .summary-line { margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 4px; border-left: 3px solid var(--accent); font-size: 0.85rem; line-height: 1.6; max-height: 150px; overflow-y: auto; }
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.tab-btn { padding: 8px 16px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; max-height: 450px; overflow-y: auto; }
+.tab-content.active { display: block; }
+.tab-content table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.tab-content table th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; }
+.tab-content table td { padding: 8px; border-bottom: 1px solid var(--bg); vertical-align: top; }
+.tab-content .stars { color: #f1c40f; white-space: nowrap; }
+.downloads { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.downloads a { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 0.85rem; }
+.downloads a:hover { border-color: var(--accent); color: var(--accent); }
+.chat-section { margin-top: 24px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.chat-section h3 { font-size: 1rem; margin-bottom: 12px; color: var(--muted); }
+.chat-log { max-height: 300px; overflow-y: auto; margin-bottom: 12px; }
+.chat-msg { margin-bottom: 12px; padding: 8px 12px; border-radius: var(--radius); font-size: 0.9rem; line-height: 1.5; }
+.chat-msg.user { background: #1a1a3a; }
+[data-theme="light"] .chat-msg.user { background: #e8e8ff; }
+.chat-msg.assistant { background: var(--border); }
+.chat-input { display: flex; gap: 8px; }
+.chat-input input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 0.9rem; }
+.chat-input button { padding: 10px 16px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; }
+.chat-input button:hover { background: var(--accent-hover); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.streaming { animation: pulse 1s infinite; }
+.empty-history { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 20px 0; }
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- ════════ Sidebar ════════ -->
+<div id="sidebar">
+  <h2>📋 历史记录 <span style="display:flex;gap:4px"><button onclick="loadHistory()" title="刷新">↻</button><button id="delBtn" onclick="deleteSelected()" title="删除选中" style="display:none;color:var(--danger);border-color:var(--danger)">🗑</button></span></h2>
+  <div id="historyList"><div class="empty-history">暂无记录</div></div>
+  <div id="historyActions" style="display:none;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+    <button onclick="deleteSelected()" style="width:100%;padding:6px;background:none;border:1px solid var(--danger);border-radius:4px;color:var(--danger);cursor:pointer;font-size:0.78rem">删除选中记录</button>
+  </div>
+</div>
+<button id="sidebarToggle" onclick="toggleSidebar()" title="收起/展开侧栏">◀</button>
+
+<!-- ════════ Main ════════ -->
+<div id="main">
+  <div class="header">
+    <h1>Video Analyzer</h1>
+    <button id="themeToggle" onclick="toggleTheme()" title="切换主题">🌙</button>
+  </div>
+  <div class="input-box">
+    <input type="text" id="urlInput" placeholder="粘贴 YouTube 或 Bilibili 视频 URL..." />
+    <button id="analyzeBtn" onclick="analyze()">解析</button>
+  </div>
+  <div id="progress">
+    <div id="statusLine">就绪</div>
+    <div id="downloadBar" class="bar-row">
+      <span>下载音频</span><progress value="0" max="100"></progress><span>0%</span>
+    </div>
+    <div id="transcribeBar" class="bar-row">
+      <span>语音识别</span><progress value="0" max="100"></progress><span>0%</span>
+    </div>
+  </div>
+  <div id="error" class="error"></div>
+  <div id="result" class="result">
+    <div class="hero">
+      <img id="thumb" src="" alt="" />
+      <div class="meta">
+        <h2 id="title"></h2>
+        <p id="meta-line"></p>
+        <div id="summaryLine" class="summary-line"></div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('keypoints')">重点标示</button>
+      <button class="tab-btn" onclick="switchTab('subtitles')">完整字幕</button>
+      <button class="tab-btn" onclick="switchTab('overview')">内容概览</button>
+    </div>
+    <div id="tab-keypoints" class="tab-content active"></div>
+    <div id="tab-subtitles" class="tab-content"></div>
+    <div id="tab-overview" class="tab-content"></div>
+    <div class="downloads" id="downloads"></div>
+    <div class="chat-section">
+      <h3>对视频内容提问</h3>
+      <div class="chat-log" id="chatLog"></div>
+      <div class="chat-input">
+        <input type="text" id="chatInput" placeholder="问一个关于视频内容的问题..." onkeydown="if(event.key==='Enter')ask()" />
+        <button onclick="ask()">发送</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Theme ──────────────────────────
+(function() {
+  const saved = localStorage.getItem('theme') || 'dark';
+  document.body.setAttribute('data-theme', saved);
+  document.getElementById('themeToggle').textContent = saved === 'dark' ? '🌙' : '☀️';
+})();
+function toggleTheme() {
+  const body = document.body;
+  const cur = body.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  body.setAttribute('data-theme', next);
+  document.getElementById('themeToggle').textContent = next === 'dark' ? '🌙' : '☀️';
+  localStorage.setItem('theme', next);
+}
+
+// ── State ──────────────────────────
+let currentTaskId = null;
+let currentKeypoints = [];
+let currentSubtitles = [];
+let currentOverview = '';
+let currentHistory = [];
+
+// ── History ────────────────────────
+async function loadHistory() {
+  try {
+    const r = await fetch('/api/history');
+    currentHistory = await r.json();
+    const list = document.getElementById('historyList');
+    if (!currentHistory.length) {
+      list.innerHTML = '<div class="empty-history">暂无记录</div>';
+      return;
+    }
+    list.innerHTML = currentHistory.map((h, i) => `
+      <div class="history-item" data-idx="${i}">
+        <div style="display:flex;align-items:flex-start;gap:6px">
+          <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
+          <div style="flex:1;min-width:0" onclick="showHistory(${i})">
+            <div class="hi-title">${esc(h.title)}</div>
+            <div class="hi-time">${fmtDate(h.time)}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    updateDelBtn();
+  } catch(e) {
+    console.error('History load failed:', e);
+  }
+}
+
+function updateDelBtn() {
+  const checked = document.querySelectorAll('.hi-cb:checked').length;
+  document.getElementById('delBtn').style.display = checked > 0 ? 'inline' : 'none';
+  document.getElementById('historyActions').style.display = checked > 0 ? 'block' : 'none';
+}
+
+async function deleteSelected() {
+  const cbs = document.querySelectorAll('.hi-cb:checked');
+  if (!cbs.length) return;
+  if (!confirm(`确定删除 ${cbs.length} 条历史记录？此操作不可撤销。`)) return;
+  const toDelete = [...cbs].map(cb => currentHistory[parseInt(cb.dataset.idx)].base_name);
+  for (const bn of toDelete) {
+    try { await fetch(`/api/history/${encodeURIComponent(bn)}`, { method: 'DELETE' }); } catch(e) {}
+  }
+  loadHistory();
+}
+
+function showHistory(idx) {
+  const h = currentHistory[idx];
+  if (!h) return;
+
+  // Highlight active
+  document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.history-item[data-idx="${idx}"]`)?.classList.add('active');
+
+  document.getElementById('statusLine').textContent = '加载历史记录...';
+  document.getElementById('statusLine').style.color = 'var(--accent)';
+  document.getElementById('error').style.display = 'none';
+  hideBar('downloadBar');
+  hideBar('transcribeBar');
+
+  // Fetch full content
+  fetch(`/api/history/${encodeURIComponent(h.base_name)}`)
+    .then(r => { if (!r.ok) throw new Error('加载失败'); return r.json(); })
+    .then(d => {
+      document.getElementById('title').textContent = d.title || h.title;
+      document.getElementById('meta-line').textContent = [d.platform, d.author, d.duration].filter(Boolean).join(' | ') || fmtDate(h.time);
+      if (d.url) document.getElementById('meta-line').innerHTML += ` | <a href="${esc(d.url)}" target="_blank" style="color:var(--accent)">原链</a>`;
+      if (d.thumbnail) document.getElementById('thumb').src = d.thumbnail;
+      else document.getElementById('thumb').src = '';
+
+      // Parse overview to extract summary line (between --- markers)
+      let summary = '';
+      if (d.overview) {
+        const parts = d.overview.split('---');
+        if (parts.length >= 2) summary = parts.slice(1).join(' ').trim().substring(0, 500);
+      }
+      document.getElementById('summaryLine').textContent = summary || '无摘要';
+
+      // Render tabs
+      if (d.keypoints && d.keypoints.length) {
+        renderKeypoints(d.keypoints);
+      } else {
+        document.getElementById('tab-keypoints').innerHTML = '<p style="color:var(--muted)">暂无重点</p>';
+      }
+      if (d.subtitles && d.subtitles.length) {
+        renderSubtitles(d.subtitles);
+      } else {
+        document.getElementById('tab-subtitles').innerHTML = '<p style="color:var(--muted)">暂无字幕</p>';
+      }
+      if (d.overview) {
+        renderOverview(d.overview);
+      } else {
+        document.getElementById('tab-overview').innerHTML = '<p style="color:var(--muted)">暂无概览</p>';
+      }
+
+      // Downloads
+      document.getElementById('downloads').innerHTML = Object.entries(h.files).map(([k, v]) => {
+        const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示' };
+        return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k} (.md)</a>`;
+      }).join('');
+
+      document.getElementById('statusLine').textContent = '已加载历史记录';
+      document.getElementById('statusLine').style.color = 'var(--success)';
+      document.getElementById('result').classList.add('show');
+      switchTab('keypoints');
+    })
+    .catch(e => {
+      document.getElementById('error').textContent = '加载失败: ' + e.message;
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('statusLine').style.color = 'var(--danger)';
+    });
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const btn = document.getElementById('sidebarToggle');
+  sb.classList.toggle('collapsed');
+  btn.textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
+}
+
+function fmtDate(ts) {
+  const d = new Date(ts * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ── Analyze ────────────────────────
+async function analyze() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+  const btn = document.getElementById('analyzeBtn');
+  const err = document.getElementById('error');
+  const result = document.getElementById('result');
+  btn.disabled = true;
+  err.style.display = 'none';
+  result.classList.remove('show');
+  document.getElementById('statusLine').textContent = '启动中...';
+  document.getElementById('statusLine').style.color = 'var(--accent)';
+  resetBar('downloadBar');
+  resetBar('transcribeBar');
+
+  try {
+    const r = await fetch(`/api/analyze?url=${encodeURIComponent(url)}`, { method: 'POST' });
+    const { task_id } = await r.json();
+    currentTaskId = task_id;
+
+    const es = new EventSource(`/api/progress/${task_id}`);
+    es.addEventListener('status', e => { document.getElementById('statusLine').textContent = e.data; });
+    es.addEventListener('download', e => { updateBar('downloadBar', e.data); });
+    es.addEventListener('transcribe', e => { updateBar('transcribeBar', e.data); });
+    es.addEventListener('done', e => {
+      const d = JSON.parse(e.data);
+      document.getElementById('title').textContent = d.title;
+      document.getElementById('meta-line').textContent = `作者: ${d.author} | 时长: ${fmtDuration(d.duration)}`;
+      if (d.thumbnail) document.getElementById('thumb').src = d.thumbnail;
+      document.getElementById('summaryLine').textContent = d.summary;
+      currentKeypoints = d.keypoints;
+      currentSubtitles = d.subtitles || [];
+      currentOverview = d.overview || d.summary || '';
+      const isTranslated = d.translated || false;
+      renderKeypoints(d.keypoints, isTranslated);
+      renderSubtitles(currentSubtitles, isTranslated);
+      renderOverview(currentOverview);
+      renderDownloads(d.files);
+      document.getElementById('statusLine').textContent = '分析完成';
+      document.getElementById('statusLine').style.color = 'var(--success)';
+      hideBar('downloadBar');
+      hideBar('transcribeBar');
+      result.classList.add('show');
+      btn.disabled = false;
+      es.close();
+      loadHistory(); // Refresh sidebar
+    });
+    es.addEventListener('error', e => {
+      err.textContent = '错误: ' + (e.data || '未知错误');
+      err.style.display = 'block';
+      document.getElementById('statusLine').style.color = 'var(--danger)';
+      hideBar('downloadBar');
+      hideBar('transcribeBar');
+      btn.disabled = false;
+      es.close();
+    });
+    es.onerror = () => { es.close(); };
+  } catch(e) {
+    err.textContent = '请求失败: ' + e.message;
+    err.style.display = 'block';
+    btn.disabled = false;
+  }
+}
+
+// ── Progress Bars ──────────────────
+function updateBar(id, pct) {
+  const bar = document.getElementById(id);
+  bar.classList.add('show');
+  bar.querySelector('progress').value = parseFloat(pct);
+  bar.querySelector('span:last-child').textContent = Math.round(parseFloat(pct)) + '%';
+}
+function hideBar(id) { document.getElementById(id).classList.remove('show'); }
+function resetBar(id) {
+  const bar = document.getElementById(id);
+  bar.classList.remove('show');
+  bar.querySelector('progress').value = 0;
+  bar.querySelector('span:last-child').textContent = '0%';
+}
+
+// ── Renderers ──────────────────────
+function renderKeypoints(kps, translated) {
+  const el = document.getElementById('tab-keypoints');
+  if (!kps.length) { el.innerHTML = '<p style="color:var(--muted)">暂无重点</p>'; return; }
+  let html = '<table><tr><th>时间</th><th>内容</th><th>重要度</th></tr>';
+  kps.forEach(k => {
+    const s = '★'.repeat(k.importance) + '☆'.repeat(5 - k.importance);
+    let content = esc(k.content);
+    if (translated && k.content.includes('\n')) {
+      const [orig, zh] = k.content.split('\n');
+      content = `${esc(orig)}<br><span style="color:var(--muted);font-size:0.85rem">${esc(zh)}</span>`;
+    }
+    html += `<tr><td>${fmtTime(k.timestamp)}</td><td>${content}</td><td class="stars">${s}</td></tr>`;
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+function renderSubtitles(lines, translated) {
+  const el = document.getElementById('tab-subtitles');
+  if (!lines.length) { el.innerHTML = '<p style="color:var(--muted)">暂未加载</p>'; return; }
+  el.innerHTML = lines.map(l => {
+    if (translated && l.includes('\n')) {
+      const [orig, zh] = l.split('\n');
+      return `<p style="margin:4px 0;font-size:0.9rem"><span style="color:var(--text)">${esc(orig)}</span><br><span style="color:var(--muted);font-size:0.82rem;padding-left:8px">${esc(zh)}</span></p>`;
+    }
+    return `<p style="margin:4px 0;font-size:0.9rem;color:var(--muted)">${esc(l)}</p>`;
+  }).join('');
+}
+function renderOverview(text) {
+  const el = document.getElementById('tab-overview');
+  if (!text) { el.innerHTML = '<p style="color:var(--muted)">暂未加载</p>'; return; }
+  el.innerHTML = `<div style="white-space:pre-wrap;line-height:1.7;font-size:0.9rem">${esc(text)}</div>`;
+}
+function renderDownloads(files) {
+  const el = document.getElementById('downloads');
+  const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示' };
+  el.innerHTML = Object.entries(files).map(([k, v]) => {
+    return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k} (.md)</a>`;
+  }).join('');
+}
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const btns = document.querySelectorAll('.tab-btn');
+  if (name === 'keypoints') { btns[0].classList.add('active'); document.getElementById('tab-keypoints').classList.add('active'); }
+  else if (name === 'subtitles') { btns[1].classList.add('active'); document.getElementById('tab-subtitles').classList.add('active'); }
+  else { btns[2].classList.add('active'); document.getElementById('tab-overview').classList.add('active'); }
+}
+
+// ── Chat ───────────────────────────
+async function ask() {
+  const input = document.getElementById('chatInput');
+  const q = input.value.trim();
+  if (!q) return;
+  const log = document.getElementById('chatLog');
+  log.innerHTML += `<div class="chat-msg user">${esc(q)}</div>`;
+  input.value = '';
+  const aiDiv = document.createElement('div');
+  aiDiv.className = 'chat-msg assistant streaming';
+  aiDiv.textContent = '思考中...';
+  log.appendChild(aiDiv);
+  log.scrollTop = log.scrollHeight;
+  try {
+    const r = await fetch(`/api/chat?task_id=${currentTaskId}&q=${encodeURIComponent(q)}`);
+    const d = await r.json();
+    aiDiv.textContent = d.answer || '无法回答';
+    aiDiv.classList.remove('streaming');
+  } catch(e) {
+    aiDiv.textContent = '请求失败: ' + e.message;
+    aiDiv.classList.remove('streaming');
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Utils ──────────────────────────
+function fmtTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60).toString().padStart(2, '0');
+  const h = Math.floor(m / 60);
+  if (h) return `${h}:${(m%60).toString().padStart(2,'0')}:${sec}`;
+  return `${m}:${sec}`;
+}
+function fmtDuration(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60).toString().padStart(2, '0');
+  const h = Math.floor(m / 60);
+  if (h) return `${h}:${(m%60).toString().padStart(2,'0')}:${sec}`;
+  return `${m}:${sec}`;
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── Init ───────────────────────────
+loadHistory();
+</script>
+</body>
+</html>
