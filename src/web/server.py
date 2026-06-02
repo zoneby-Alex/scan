@@ -108,14 +108,17 @@ async def analyze(url: str = Query(...)):
                 thumb = meta.thumbnail
             except Exception as e:
                 _push(task_id, "status", f"API 提取失败 ({e})，改用语音识别...")
-                # Get basic info via yt-dlp
+                # Get basic info via yt-dlp (may fail for some sites like Bilibili)
                 opts = {"quiet": True, "no_warnings": True, "extract_flat": False, **_BILI_YTDLP_OPTS}
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                title = info.get("title", "")
-                author = info.get("uploader", "")
-                duration = int(info.get("duration", 0) or 0)
-                thumb = info.get("thumbnail", "")
+                try:
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                    title = info.get("title", "") or title
+                    author = info.get("uploader", "") or author
+                    duration = int(info.get("duration", 0) or 0) or duration
+                    thumb = info.get("thumbnail", "") or thumb
+                except Exception:
+                    pass  # Use whatever we already have from partial extract
                 meta = None
 
             subs = meta.subtitles if meta else []
@@ -131,10 +134,11 @@ async def analyze(url: str = Query(...)):
                     lambda pct: _push(task_id, "transcribe", f"{pct:.0f}"))
 
                 _push(task_id, "status", f"语音识别完成 ({len(subs)} 条)")
-                # Use yt-dlp metadata
+                # Preserve video_id from already-fetched metadata
+                existing_video_id = meta.video_id if meta else ""
                 meta = VideoMeta(
                     platform=extractor.platform,
-                    video_id="",
+                    video_id=existing_video_id,
                     title=title,
                     url=url,
                     duration=duration,

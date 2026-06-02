@@ -125,6 +125,11 @@ class BilibiliExtractor(BaseExtractor):
         bvid = self._parse_bvid(url)
         info = self._fetch_info(bvid)
         cid = info.get("cid", 0)
+        subs = []
+        try:
+            subs = self._fetch_subtitles(bvid, cid)
+        except RuntimeError:
+            pass  # 无字幕，server.py 会走 Whisper 回退
         return VideoMeta(
             platform="bilibili",
             video_id=bvid,
@@ -133,7 +138,7 @@ class BilibiliExtractor(BaseExtractor):
             duration=int(info.get("duration", 0) or 0),
             author=info.get("owner", {}).get("name", ""),
             thumbnail=info.get("pic", ""),
-            subtitles=self._fetch_subtitles(bvid, cid),
+            subtitles=subs,
         )
 
     def _parse_bvid(self, url: str) -> str:
