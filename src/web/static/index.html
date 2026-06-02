@@ -206,17 +206,19 @@ async function loadHistory() {
       list.innerHTML = '<div class="empty-history">暂无记录</div>';
       return;
     }
-    list.innerHTML = currentHistory.map((h, i) => `
-      <div class="history-item" data-idx="${i}">
+    list.innerHTML = currentHistory.map((h, i) => {
+      const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
+      return `<div class="history-item" data-idx="${i}">
         <div style="display:flex;align-items:flex-start;gap:6px">
           <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
           <div style="flex:1;min-width:0" onclick="showHistory(${i})">
             <div class="hi-title">${esc(h.title)}</div>
             <div class="hi-time">${fmtDate(h.time)}</div>
+            ${tagHtml}
           </div>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
     updateDelBtn();
   } catch(e) {
     console.error('History load failed:', e);
@@ -291,8 +293,9 @@ function showHistory(idx) {
 
       // Downloads
       document.getElementById('downloads').innerHTML = Object.entries(h.files).map(([k, v]) => {
-        const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示' };
-        return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k} (.md)</a>`;
+        const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示', srt: 'SRT 字幕' };
+        const ext = k === 'srt' ? '' : ' (.md)';
+        return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k}${ext}</a>`;
       }).join('');
 
       document.getElementById('statusLine').textContent = '已加载历史记录';
@@ -434,9 +437,10 @@ function renderOverview(text) {
 }
 function renderDownloads(files) {
   const el = document.getElementById('downloads');
-  const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示' };
+  const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示', srt: 'SRT 字幕' };
   el.innerHTML = Object.entries(files).map(([k, v]) => {
-    return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k} (.md)</a>`;
+    const ext = k === 'srt' ? '' : ' (.md)';
+    return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k}${ext}</a>`;
   }).join('');
 }
 function switchTab(name) {

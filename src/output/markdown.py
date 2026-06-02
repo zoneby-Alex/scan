@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 from src.models import AnalysisResult, KeyPoint, SubtitleEntry, VideoMeta
+from src.output.srt import generate_srt
 
 _OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
 
@@ -14,6 +15,9 @@ def generate_all(result: AnalysisResult, base_name: str) -> dict[str, str]:
     outputs["subtitles"] = _gen_subtitles(result.meta, base_name, folder)
     outputs["overview"] = _gen_overview(result, base_name, folder)
     outputs["keypoints"] = _gen_keypoints(result, base_name, folder)
+    srt_path = folder / "subtitles.srt"
+    srt_path.write_text(generate_srt(result.meta.subtitles), encoding="utf-8")
+    outputs["srt"] = str(srt_path.relative_to(_OUTPUT_DIR))
     return outputs
 
 

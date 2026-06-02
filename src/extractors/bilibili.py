@@ -1,6 +1,11 @@
 import asyncio
+import hashlib
 import json
+import os
+import random
 import re
+import time
+from pathlib import Path
 
 import httpx
 
@@ -14,11 +19,100 @@ _BILI_URL_PATTERN = re.compile(
 _BILI_API_INFO = "https://api.bilibili.com/x/web-interface/view"
 _BILI_API_PLAYER = "https://api.bilibili.com/x/player/v2"
 _BILI_API_PLAYER_WBI = "https://api.bilibili.com/x/player/wbi/v2"
+_BILI_API_NAV = "https://api.bilibili.com/x/web-interface/nav"
 
-_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+]
+
+_BASE_HEADERS = {
     "Referer": "https://www.bilibili.com",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Origin": "https://www.bilibili.com",
 }
+
+
+def _load_cookie_str() -> str:
+    """Load Bilibili cookies from Netscape-format file (BILIBILI_COOKIES env var)."""
+    cookie_path = os.environ.get("BILIBILI_COOKIES", "")
+    if not cookie_path:
+        return ""
+    try:
+        p = Path(cookie_path)
+        if not p.exists():
+            p = Path.cwd() / cookie_path
+        if not p.exists():
+            return ""
+        cookies = []
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("HttpOnly "):
+                line = line[9:]
+            parts = line.split("\t")
+            if len(parts) >= 7:
+                domain = parts[0]
+                name, value = parts[5], parts[6]
+                if "bilibili.com" in domain:
+                    cookies.append(f"{name}={value}")
+        return "; ".join(cookies)
+    except Exception:
+        return ""
+
+
+_COOKIE_STR = _load_cookie_str()
+
+
+def _get_headers(ua_index: int = 0) -> dict:
+    h = {
+        "User-Agent": _USER_AGENTS[ua_index % len(_USER_AGENTS)],
+        **_BASE_HEADERS,
+    }
+    if _COOKIE_STR:
+        h["Cookie"] = _COOKIE_STR
+    return h
+
+
+def _retry_get(url: str, params: dict = None, max_retries: int = 3) -> httpx.Response:
+    """GET with UA rotation and exponential backoff on 412."""
+    for attempt in range(max_retries):
+        headers = _get_headers(attempt)
+        r = httpx.get(url, params=params, headers=headers, timeout=15)
+        if r.status_code == 412 and attempt < max_retries - 1:
+            time.sleep(1.5 ** attempt + random.uniform(0, 0.5))
+            continue
+        r.raise_for_status()
+        return r
+    # unreachable
+    raise httpx.HTTPStatusError("max retries exceeded", request=None, response=r)
+
+
+def _sign_wbi(params: dict) -> dict:
+    """Apply WBI signature to params. Falls back to unsigned params on failure."""
+    try:
+        r = httpx.get(_BILI_API_NAV, headers=_get_headers(), timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        if data.get("code") != 0:
+            return params
+        img_url = data["data"]["wbi_img"]["img_url"]
+        sub_url = data["data"]["wbi_img"]["sub_url"]
+        img_key = img_url.rsplit("/", 1)[1].split(".")[0]
+        sub_key = sub_url.rsplit("/", 1)[1].split(".")[0]
+        mix_key = sub_key[:4] + img_key[:4]
+    except Exception:
+        return params
+
+    params = dict(sorted(params.items()))
+    params["wts"] = int(time.time())
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    params["w_rid"] = hashlib.md5((query + mix_key).encode()).hexdigest()
+    return params
 
 
 class BilibiliExtractor(BaseExtractor):
@@ -49,28 +143,40 @@ class BilibiliExtractor(BaseExtractor):
         return m.group(1)
 
     def _fetch_info(self, bvid: str) -> dict:
-        r = httpx.get(_BILI_API_INFO, params={"bvid": bvid}, headers=_HEADERS)
-        r.raise_for_status()
+        r = _retry_get(_BILI_API_INFO, params={"bvid": bvid})
         data = r.json()
         if data.get("code") != 0:
-            raise RuntimeError(f"B站 API 错误 (code={data.get('code')}): {data.get('message', 'unknown')}")
+            raise RuntimeError(
+                f"B站 API 错误 (code={data.get('code')}): {data.get('message', 'unknown')}"
+            )
         return data["data"]
 
     def _fetch_subtitles(self, bvid: str, cid: int) -> list[SubtitleEntry]:
-        # Try multiple endpoints to find subtitles
-        for endpoint in (_BILI_API_PLAYER, _BILI_API_PLAYER_WBI):
-            subs = self._try_fetch_subs(endpoint, bvid, cid)
+        # Try player/v2 first (simple, no WBI)
+        subs = self._try_fetch_subs(_BILI_API_PLAYER, bvid, cid)
+        if subs:
+            return subs
+
+        # Try player/wbi/v2 with WBI signature
+        params = {"bvid": bvid, "cid": cid}
+        signed = _sign_wbi(params)
+        if "w_rid" in signed:
+            subs = self._try_fetch_subs(_BILI_API_PLAYER_WBI, None, None, params=signed)
             if subs:
                 return subs
+
         raise RuntimeError(
             "该视频没有可用字幕（B站大部分视频不支持CC字幕，"
             "字幕通常是内嵌在视频画面中的硬字幕，需要通过Whisper语音识别提取）"
         )
 
-    def _try_fetch_subs(self, endpoint: str, bvid: str, cid: int) -> list[SubtitleEntry]:
+    def _try_fetch_subs(
+        self, endpoint: str, bvid: str, cid: int, params: dict = None
+    ) -> list[SubtitleEntry]:
         try:
-            r = httpx.get(endpoint, params={"bvid": bvid, "cid": cid}, headers=_HEADERS, timeout=15)
-            r.raise_for_status()
+            if params is None:
+                params = {"bvid": bvid, "cid": cid}
+            r = _retry_get(endpoint, params=params)
             data = r.json()
             subtitles = data.get("data", {}).get("subtitle", {}).get("subtitles", [])
         except Exception:
@@ -79,7 +185,6 @@ class BilibiliExtractor(BaseExtractor):
         if not subtitles:
             return []
 
-        # Prefer Chinese
         sub = next(
             (s for s in subtitles if "zh" in s.get("lang", "").lower().replace("-", "")),
             subtitles[0],
@@ -88,15 +193,17 @@ class BilibiliExtractor(BaseExtractor):
         if not sub_url:
             return []
 
-        # Bilibili subtitle URLs might be relative
         if sub_url.startswith("//"):
             sub_url = "https:" + sub_url
         elif sub_url.startswith("/"):
             sub_url = "https://i0.hdslb.com" + sub_url
 
-        sub_r = httpx.get(sub_url, headers=_HEADERS, timeout=15)
-        sub_r.raise_for_status()
-        entries = sub_r.json().get("body", [])
+        try:
+            sub_r = _retry_get(sub_url)
+            entries = sub_r.json().get("body", [])
+        except Exception:
+            return []
+
         return [
             SubtitleEntry(start=float(e["from"]), end=float(e["to"]), text=e["content"])
             for e in entries

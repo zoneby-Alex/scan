@@ -22,6 +22,14 @@ from src.preprocess.segmenter import build_text, segment, merge_short
 from src.rag.chat import ask as rag_ask, build_index
 from src.transcriber import cleanup_audio, download_audio, transcribe
 
+# Shared yt-dlp opts for Bilibili (cookie support)
+_BILI_YTDLP_OPTS = {}
+if settings.bilibili_cookies:
+    cookie_path = Path(settings.bilibili_cookies)
+    if cookie_path.exists():
+        _BILI_YTDLP_OPTS["cookiefile"] = str(cookie_path.resolve())
+    _BILI_YTDLP_OPTS.setdefault("extractor_args", {"bilibili": {"skip_login": ["true"]}})
+
 app = FastAPI(title="Video Analyzer")
 
 _static = Path(__file__).parent / "static"
@@ -101,7 +109,7 @@ async def analyze(url: str = Query(...)):
             except Exception as e:
                 _push(task_id, "status", f"API 提取失败 ({e})，改用语音识别...")
                 # Get basic info via yt-dlp
-                opts = {"quiet": True, "no_warnings": True, "extract_flat": False}
+                opts = {"quiet": True, "no_warnings": True, "extract_flat": False, **_BILI_YTDLP_OPTS}
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                 title = info.get("title", "")
@@ -193,6 +201,14 @@ async def analyze(url: str = Query(...)):
                 "author": meta.author, "duration": meta.duration,
                 "url": meta.url, "thumbnail": meta.thumbnail,
             }
+            if meta.subtitles:
+                _push(task_id, "status", "分类中...")
+                from src.classify import classify
+                try:
+                    tags = await asyncio.to_thread(classify, meta.title, summary_text)
+                    _meta.update(tags)
+                except Exception:
+                    pass
             (_OUTPUT_DIR / base_name / "meta.json").write_text(
                 json.dumps(_meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -273,10 +289,24 @@ def history():
             if line.startswith("# "):
                 title = line[2:].replace(" — 内容概览", "").strip()
                 break
+        # Load tags from meta.json
+        tags = []
+        category = ""
+        mj = folder / "meta.json"
+        if mj.exists():
+            try:
+                md = json.loads(mj.read_text(encoding="utf-8"))
+                tags = md.get("tags", [])
+                category = md.get("category", "")
+            except Exception:
+                pass
+
         items.append({
             "base_name": folder.name,
             "title": title or folder.name,
             "time": mtime,
+            "tags": tags,
+            "category": category,
             "files": {
                 "subtitles": str((folder / "subtitles.md").relative_to(_OUTPUT_DIR)),
                 "overview": str((folder / "overview.md").relative_to(_OUTPUT_DIR)),
@@ -311,7 +341,7 @@ def history_detail(base_name: str):
     if not folder.is_dir():
         raise HTTPException(404, "记录不存在")
 
-    result = {"base_name": base_name, "title": base_name, "subtitles": [], "overview": "", "keypoints": [], "thumbnail": ""}
+    result = {"base_name": base_name, "title": base_name, "subtitles": [], "overview": "", "keypoints": [], "thumbnail": "", "category": "", "tags": []}
 
     # Load meta.json
     mj = folder / "meta.json"
@@ -324,6 +354,8 @@ def history_detail(base_name: str):
             result["author"] = meta.get("author", "")
             result["duration"] = meta.get("duration", "")
             result["url"] = meta.get("url", "")
+            result["category"] = meta.get("category", "")
+            result["tags"] = meta.get("tags", [])
         except Exception:
             pass
 
