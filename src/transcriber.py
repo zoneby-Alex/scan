@@ -96,6 +96,11 @@ def download_audio(url: str, progress_cb=None) -> Path:
     _TEMP_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
     tmpdir = _TEMP_VIDEO_DIR / str(uuid.uuid4())[:8]
     tmpdir.mkdir(exist_ok=True)
+
+    # Bilibili: use playurl API to bypass yt-dlp 412
+    if "bilibili.com/video/BV" in url:
+        return _download_bilibili_audio(url, tmpdir, progress_cb)
+
     out = tmpdir / "audio"
 
     def hook(d):
@@ -132,6 +137,52 @@ def download_audio(url: str, progress_cb=None) -> Path:
     if candidates:
         return candidates[0]
     raise RuntimeError("音频下载失败")
+
+
+def _download_bilibili_audio(url: str, tmpdir: Path, progress_cb=None) -> Path:
+    """Download Bilibili audio via playurl API, bypassing yt-dlp."""
+    import re
+
+    import httpx
+
+    from src.extractors.bilibili import BilibiliExtractor, fetch_bilibili_audio_url
+
+    ex = BilibiliExtractor()
+    bvid = ex._parse_bvid(url)
+    info = ex._fetch_info(bvid)
+    cid = info.get("cid", 0)
+
+    result = fetch_bilibili_audio_url(bvid, cid)
+    if not result:
+        raise RuntimeError("无法获取 Bilibili 音频流地址")
+    audio_url, mime_type = result
+
+    # Determine extension from mime type
+    ext = ".m4a"
+    if "webm" in mime_type:
+        ext = ".webm"
+    elif "mp4" in mime_type:
+        ext = ".mp4"
+    outpath = tmpdir / ("audio" + ext)
+
+    dl_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+        "Referer": "https://www.bilibili.com",
+    }
+
+    with httpx.stream("GET", audio_url, headers=dl_headers, timeout=120, follow_redirects=True) as r:
+        r.raise_for_status()
+        total = int(r.headers.get("content-length", 0)) or None
+        downloaded = 0
+        with open(outpath, "wb") as f:
+            for chunk in r.iter_bytes(chunk_size=1024 * 1024):
+                f.write(chunk)
+                downloaded += len(chunk)
+                if progress_cb and total:
+                    progress_cb(min(downloaded / total * 100, 99))
+    if progress_cb:
+        progress_cb(100)
+    return outpath
 
 
 def transcribe(audio_path: Path, progress_cb=None) -> list[SubtitleEntry]:

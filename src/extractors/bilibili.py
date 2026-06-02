@@ -20,6 +20,7 @@ _BILI_API_INFO = "https://api.bilibili.com/x/web-interface/view"
 _BILI_API_PLAYER = "https://api.bilibili.com/x/player/v2"
 _BILI_API_PLAYER_WBI = "https://api.bilibili.com/x/player/wbi/v2"
 _BILI_API_NAV = "https://api.bilibili.com/x/web-interface/nav"
+_BILI_API_PLAYURL = "https://api.bilibili.com/x/player/playurl"
 
 _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -113,6 +114,21 @@ def _sign_wbi(params: dict) -> dict:
     query = "&".join(f"{k}={v}" for k, v in params.items())
     params["w_rid"] = hashlib.md5((query + mix_key).encode()).hexdigest()
     return params
+
+
+def fetch_bilibili_audio_url(bvid: str, cid: int) -> tuple[str, str] | None:
+    """Get DASH audio URL from Bilibili playurl API. Returns (url, mime_type) or None."""
+    try:
+        params = {"bvid": bvid, "cid": cid, "fnval": 4048, "fourk": 1}
+        r = _retry_get(_BILI_API_PLAYURL, params=params)
+        data = r.json()
+        audios = data.get("data", {}).get("dash", {}).get("audio", [])
+        if not audios:
+            return None
+        best = max(audios, key=lambda a: a.get("bandwidth", 0))
+        return best["baseUrl"], best.get("mimeType", "audio/mp4")
+    except Exception:
+        return None
 
 
 class BilibiliExtractor(BaseExtractor):
