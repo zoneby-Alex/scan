@@ -36,7 +36,7 @@ pip install fastapi uvicorn httpx youtube-transcript-api yt-dlp chromadb \
 ANTHROPIC_AUTH_TOKEN=sk-your-deepseek-key
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ANTHROPIC_MODEL=deepseek-v4-flash[1m]
-ANTHROPIC_REASONING_MODEL=deepseek-v4-pro
+ANTHROPIC_REASONING_MODEL=deepseek-v4-flash[1m]
 ```
 
 ## 功能
@@ -95,7 +95,7 @@ URL → 平台匹配 → 字幕提取(3级回退)
 | 阶段 | 模型 | 说明 |
 |------|------|------|
 | 摘要生成 | deepseek-v4-flash[1m] | 长视频动态 Map-Reduce |
-| 重点提取 | deepseek-v4-pro | json_schema 约束 |
+| 重点提取 | deepseek-v4-flash[1m] | json_schema 约束 |
 | 外文翻译 | deepseek-v4-flash[1m] | 批量翻译 |
 | RAG 问答 | deepseek-v4-flash[1m] | 检索 top-5 + 生成 |
 
