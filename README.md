@@ -6,8 +6,9 @@
 
 ```bash
 cd D:\project\claude\scan
-pip install -r requirements.txt   # 首次
-python -m src.web.server          # 启动
+pip install -r requirements.txt          # 首次
+taskkill //F //IM python.exe 2>nul       # 停旧进程
+python -c "import uvicorn; uvicorn.run('src.web.server:app', host='127.0.0.1', port=8787)"
 ```
 
 浏览器打开 `http://127.0.0.1:8787`，粘贴视频 URL，点击解析。
