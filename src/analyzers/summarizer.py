@@ -234,3 +234,19 @@ def _extract_json_from_text(text: str) -> list:
         import json
         return json.loads(m.group())
     return []
+
+
+_CONCEPT_SYSTEM = """从视频内容中提取 3-5 个核心概念/术语，返回 JSON 字符串数组。
+每个概念应该是可独立成笔记的专业术语（如 "self-attention"、"patch embedding"、"Vision Transformer"）。
+不要重复，优先选择视频中最核心的技术术语。
+只输出 JSON 数组，不要其他内容。"""
+
+
+def extract_concepts(title: str, summary: str, keypoints: list[KeyPoint]) -> list[str]:
+    kp_text = "\n".join(f"- {kp.content}" for kp in keypoints[:10])
+    prompt = f"视频标题: {title}\n\n摘要: {summary[:3000]}\n\n重点:\n{kp_text}"
+    try:
+        result = chat_json(_CONCEPT_SYSTEM, prompt, max_tokens=512)
+        return result if isinstance(result, list) else []
+    except Exception:
+        return []

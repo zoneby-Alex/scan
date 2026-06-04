@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     port: int = 8787
 
     bilibili_cookies: str = ""
+    output_dir: str = ""
+    obsidian_vault: str = ""
 
     @property
     def anthropic_kwargs(self) -> dict:

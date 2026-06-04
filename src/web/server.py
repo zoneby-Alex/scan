@@ -166,6 +166,15 @@ async def analyze(url: str = Query(...)):
                 extract_keypoints, subs, meta.title,
                 lambda msg: _push(task_id, "status", msg))
 
+            # Concept extraction for Obsidian wikilinks
+            concepts = []
+            try:
+                _push(task_id, "status", "提取核心概念...")
+                from src.analyzers.summarizer import extract_concepts
+                concepts = await asyncio.to_thread(extract_concepts, meta.title, summary_text, keypoints)
+            except Exception:
+                pass
+
             # Translation for non-Chinese videos
             translated = False
             from src.translate import needs_translation, translate_keypoints, translate_subtitles, translate_text
@@ -196,7 +205,7 @@ async def analyze(url: str = Query(...)):
             )
 
             base_name = re.sub(r"[\\/:*?\"<>|' ]", "_", meta.title)[:60]
-            files = await asyncio.to_thread(generate_all, result, base_name)
+            files = await asyncio.to_thread(generate_all, result, base_name, concepts=concepts)
 
             # Persist metadata for history
             from src.output.markdown import _OUTPUT_DIR
@@ -204,6 +213,7 @@ async def analyze(url: str = Query(...)):
                 "title": meta.title, "platform": meta.platform,
                 "author": meta.author, "duration": meta.duration,
                 "url": meta.url, "thumbnail": meta.thumbnail,
+                "concepts": concepts,
             }
             if meta.subtitles:
                 _push(task_id, "status", "分类中...")
