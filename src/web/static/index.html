@@ -50,6 +50,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .history-item .hi-path { font-size: 0.62rem; color: var(--accent); margin-bottom: 2px; display: inline-block; border: 1px solid var(--accent); border-radius: 3px; padding: 0 5px; opacity: 0.85; }
 .history-item.active .hi-path { color: #fff; border-color: rgba(255,255,255,0.6); }
 
+/* ── Sidebar group headers ─────────── */
+.hi-group { margin-bottom: 6px; }
+.hi-group-header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; color: var(--muted); user-select: none; transition: background 0.15s; }
+.hi-group-header:hover { background: var(--border); }
+.hi-group-header .hi-group-arrow { font-size: 0.6rem; transition: transform 0.2s; width: 10px; text-align: center; flex-shrink: 0; }
+.hi-group-header .hi-group-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hi-group-header .hi-group-count { font-size: 0.65rem; opacity: 0.6; flex-shrink: 0; }
+.hi-group.collapsed .hi-group-body { display: none; }
+.hi-group.collapsed .hi-group-arrow { transform: rotate(-90deg); }
+
 /* ── Main ─────────────────────────── */
 #main { flex: 1; padding: 24px 20px; overflow-y: auto; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
@@ -208,21 +218,41 @@ async function loadHistory() {
       list.innerHTML = '<div class="empty-history">暂无记录</div>';
       return;
     }
-    list.innerHTML = currentHistory.map((h, i) => {
-      const pathLabel = pathShort(h.path);
-      const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
-      return `<div class="history-item" data-idx="${i}">
-        <div style="display:flex;align-items:flex-start;gap:6px">
-          <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
-          <div style="flex:1;min-width:0" onclick="showHistory(${i})">
-            ${pathLabel ? `<div class="hi-path" title="${esc(h.path || '')}">${esc(pathLabel)}</div>` : ''}
-            <div class="hi-title">${esc(h.title)}</div>
-            <div class="hi-time">${fmtDate(h.time)}</div>
-            ${tagHtml}
-          </div>
+    // Group by path
+    const groups = {};
+    currentHistory.forEach((h, i) => {
+      const key = h.path || '未知';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(i);
+    });
+
+    let html = '';
+    for (const [path, indices] of Object.entries(groups)) {
+      const pathLabel = pathShort(path);
+      html += `<div class="hi-group">
+        <div class="hi-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+          <span class="hi-group-arrow">▼</span>
+          <span class="hi-group-name" title="${esc(path)}">${esc(pathLabel)}</span>
+          <span class="hi-group-count">${indices.length}</span>
         </div>
-      </div>`;
-    }).join('');
+        <div class="hi-group-body">`;
+
+      for (const i of indices) {
+        const h = currentHistory[i];
+        const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
+        html += `<div class="history-item" data-idx="${i}">
+          <div style="display:flex;align-items:flex-start;gap:6px">
+            <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
+            <div style="flex:1;min-width:0" onclick="showHistory(${i})">
+              <div class="hi-title">${esc(h.title)}</div>
+              <div class="hi-time">${fmtDate(h.time)}</div>
+              ${tagHtml}
+          </div>
+        </div></div>`;
+      }
+      html += '</div></div>';
+    }
+    list.innerHTML = html;
     updateDelBtn();
   } catch(e) {
     console.error('History load failed:', e);
