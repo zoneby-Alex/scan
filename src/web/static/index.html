@@ -542,11 +542,9 @@ function pathColor(p) {
 
 function pathShort(p) {
   if (!p) return '';
-  const parts = p.replace(/\\/g, '/').split('/');
-  const last = parts[parts.length - 1];
-  if (last === 'output') return '项目';
-  if (last === '视频笔记') return 'Obsidian';
-  return last;
+  const parts = p.replace(/\\/g, '/').split('/').filter(x => x && x !== ':');
+  const count = Math.min(parts.length, 3);
+  return parts.slice(-count).join(' / ');
 }
 
 // ── Init ───────────────────────────
