@@ -47,6 +47,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .history-item .hi-title { font-size: 0.82rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
 .history-item .hi-time { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
 .history-item.active .hi-time { color: rgba(255,255,255,0.7); }
+.history-item .hi-path { font-size: 0.62rem; color: var(--muted); margin-top: 2px; opacity: 0.6; }
+.history-item.active .hi-path { color: rgba(255,255,255,0.5); }
 
 /* ── Main ─────────────────────────── */
 #main { flex: 1; padding: 24px 20px; overflow-y: auto; }
@@ -214,6 +216,7 @@ async function loadHistory() {
           <div style="flex:1;min-width:0" onclick="showHistory(${i})">
             <div class="hi-title">${esc(h.title)}</div>
             <div class="hi-time">${fmtDate(h.time)}</div>
+            <div class="hi-path">${esc(h.path || '')}</div>
             ${tagHtml}
           </div>
         </div>

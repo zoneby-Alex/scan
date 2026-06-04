@@ -273,37 +273,50 @@ async def analyze(url: str = Query(...)):
 
 @app.get("/api/download/{filepath:path}")
 def download(filepath: str):
-    from src.output.markdown import _OUTPUT_DIR
+    for root in _scan_dirs():
+        fp = root / filepath
+        if fp.exists():
+            return FileResponse(fp, filename=fp.name, media_type="text/markdown")
+    raise HTTPException(404, "文件不存在")
 
-    fp = _OUTPUT_DIR / filepath
-    if not fp.exists():
-        raise HTTPException(404, "文件不存在")
-    return FileResponse(fp, filename=fp.name, media_type="text/markdown")
+
+def _scan_dirs():
+    """Return list of output root dirs to scan for history records."""
+    from src.output.markdown import _OUTPUT_DIR
+    old_root = Path(__file__).parent.parent.parent / "output"
+    dirs = {}
+    for root in (_OUTPUT_DIR, old_root):
+        if root.exists():
+            dirs[str(root)] = root
+    return list(dirs.values())
 
 
 @app.get("/api/history")
 def history():
-    from src.output.markdown import _OUTPUT_DIR
     items = []
-    folders = []
-    for folder in _OUTPUT_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        overview = folder / "overview.md"
-        if not overview.exists():
-            continue
-        folders.append((overview.stat().st_mtime, overview, folder))
-    # Sort by mtime descending (newest first)
+    folders = []  # (mtime, overview_path, folder_path, root_dir)
+    for root in _scan_dirs():
+        for folder in root.iterdir():
+            if not folder.is_dir():
+                continue
+            overview = folder / "overview.md"
+            if not overview.exists():
+                continue
+            folders.append((overview.stat().st_mtime, overview, folder, root))
     folders.sort(key=lambda x: x[0], reverse=True)
 
-    for mtime, overview, folder in folders:
+    # Deduplicate by base_name (keep newest)
+    seen = set()
+    for mtime, overview, folder, root in folders:
+        if folder.name in seen:
+            continue
+        seen.add(folder.name)
         text = overview.read_text(encoding="utf-8", errors="replace")
         title = ""
         for line in text.split("\n"):
             if line.startswith("# "):
                 title = line[2:].replace(" — 内容概览", "").strip()
                 break
-        # Load tags from meta.json
         tags = []
         category = ""
         mj = folder / "meta.json"
@@ -319,12 +332,13 @@ def history():
             "base_name": folder.name,
             "title": title or folder.name,
             "time": mtime,
+            "path": str(root),
             "tags": tags,
             "category": category,
             "files": {
-                "subtitles": str((folder / "subtitles.md").relative_to(_OUTPUT_DIR)),
-                "overview": str((folder / "overview.md").relative_to(_OUTPUT_DIR)),
-                "keypoints": str((folder / "keypoints.md").relative_to(_OUTPUT_DIR)),
+                "subtitles": str((folder / "subtitles.md").relative_to(root)),
+                "overview": str((folder / "overview.md").relative_to(root)),
+                "keypoints": str((folder / "keypoints.md").relative_to(root)),
             },
         })
     return items
@@ -332,27 +346,30 @@ def history():
 
 @app.delete("/api/history/{base_name:path}")
 def delete_history(base_name: str):
-    from src.output.markdown import _OUTPUT_DIR
     import shutil
-    folder = _OUTPUT_DIR / base_name
-    if not folder.is_dir():
-        raise HTTPException(404, "记录不存在")
-    # Remove from cache and ChromaDB if possible
-    cache.delete(base_name)
-    try:
-        from src.rag.vectorstore import _client
-        _client.delete_collection(base_name)
-    except Exception:
-        pass
-    shutil.rmtree(folder)
-    return {"ok": True}
+    for root in _scan_dirs():
+        folder = root / base_name
+        if folder.is_dir():
+            cache.delete(base_name)
+            try:
+                from src.rag.vectorstore import _client
+                _client.delete_collection(base_name)
+            except Exception:
+                pass
+            shutil.rmtree(folder)
+            return {"ok": True}
+    raise HTTPException(404, "记录不存在")
 
 
 @app.get("/api/history/{base_name:path}")
 def history_detail(base_name: str):
-    from src.output.markdown import _OUTPUT_DIR
-    folder = _OUTPUT_DIR / base_name
-    if not folder.is_dir():
+    folder = None
+    for root in _scan_dirs():
+        f = root / base_name
+        if f.is_dir():
+            folder = f
+            break
+    if folder is None:
         raise HTTPException(404, "记录不存在")
 
     result = {"base_name": base_name, "title": base_name, "subtitles": [], "overview": "", "keypoints": [], "thumbnail": "", "category": "", "tags": []}
