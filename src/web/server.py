@@ -14,6 +14,7 @@ from src.analyzers import extract_keypoints, summarize
 from src.cache import cache
 from src.config import settings
 from src.extractors import get_extractor
+from src.extractors.base import clean_url
 from src.models import AnalysisResult, SubtitleEntry, VideoMeta
 from src.output.markdown import generate_all
 from src.preprocess.cleaner import clean
@@ -140,7 +141,7 @@ async def analyze(url: str = Query(...)):
                     platform=extractor.platform,
                     video_id=existing_video_id,
                     title=title,
-                    url=url,
+                    url=clean_url(url),
                     duration=duration,
                     author=author,
                     subtitles=subs,

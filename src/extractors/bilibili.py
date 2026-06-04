@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from src.extractors.base import BaseExtractor
+from src.extractors.base import BaseExtractor, clean_url
 from src.models import SubtitleEntry, VideoMeta
 
 _BILI_URL_PATTERN = re.compile(
@@ -150,7 +150,7 @@ class BilibiliExtractor(BaseExtractor):
             platform="bilibili",
             video_id=bvid,
             title=info.get("title", ""),
-            url=url,
+            url=clean_url(url),
             duration=int(info.get("duration", 0) or 0),
             author=info.get("owner", {}).get("name", ""),
             thumbnail=info.get("pic", ""),

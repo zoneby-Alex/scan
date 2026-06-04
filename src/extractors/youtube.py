@@ -8,7 +8,7 @@ from youtube_transcript_api._errors import (
     VideoUnavailable,
 )
 
-from src.extractors.base import BaseExtractor
+from src.extractors.base import BaseExtractor, clean_url
 from src.models import SubtitleEntry, VideoMeta
 
 _YT_URL_PATTERN = re.compile(
