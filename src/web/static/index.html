@@ -47,8 +47,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .history-item .hi-title { font-size: 0.82rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
 .history-item .hi-time { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
 .history-item.active .hi-time { color: rgba(255,255,255,0.7); }
-.history-item .hi-path { font-size: 0.62rem; color: var(--muted); margin-top: 2px; opacity: 0.6; }
-.history-item.active .hi-path { color: rgba(255,255,255,0.5); }
+.history-item .hi-path { font-size: 0.62rem; color: var(--accent); margin-bottom: 2px; display: inline-block; border: 1px solid var(--accent); border-radius: 3px; padding: 0 5px; opacity: 0.85; }
+.history-item.active .hi-path { color: #fff; border-color: rgba(255,255,255,0.6); }
 
 /* ── Main ─────────────────────────── */
 #main { flex: 1; padding: 24px 20px; overflow-y: auto; }
@@ -209,14 +209,15 @@ async function loadHistory() {
       return;
     }
     list.innerHTML = currentHistory.map((h, i) => {
+      const pathLabel = pathShort(h.path);
       const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
       return `<div class="history-item" data-idx="${i}">
         <div style="display:flex;align-items:flex-start;gap:6px">
           <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
           <div style="flex:1;min-width:0" onclick="showHistory(${i})">
+            ${pathLabel ? `<div class="hi-path" title="${esc(h.path || '')}">${esc(pathLabel)}</div>` : ''}
             <div class="hi-title">${esc(h.title)}</div>
             <div class="hi-time">${fmtDate(h.time)}</div>
-            <div class="hi-path">${esc(h.path || '')}</div>
             ${tagHtml}
           </div>
         </div>
@@ -496,6 +497,15 @@ function fmtDuration(s) {
   return `${m}:${sec}`;
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function pathShort(p) {
+  if (!p) return '';
+  const parts = p.replace(/\\/g, '/').split('/');
+  const last = parts[parts.length - 1];
+  if (last === 'output') return '📁 项目 ' + parts.slice(-2, -1)[0] || '旧记录';
+  if (last === '视频笔记') return '📁 Obsidian';
+  return '📁 ' + last;
+}
 
 // ── Init ───────────────────────────
 loadHistory();
