@@ -416,30 +416,56 @@ def history_detail(base_name: str):
     if kp.exists():
         text = kp.read_text(encoding="utf-8", errors="replace")
         in_table = False
+        pending = None  # accumulate multi-line table rows
         for line in text.split("\n"):
             if line.startswith("| 时间 |"):
                 in_table = True
+                pending = None
                 continue
             if in_table and line.startswith("|---"):
                 continue
             if in_table and line.startswith("|") and not line.startswith("| 时间"):
-                cells = [c.strip() for c in line.split("|")[1:-1]]
+                # Split respecting pipe structure
+                parts_raw = line.split("|")
+                cells = [c.strip() for c in parts_raw[1:]]
                 if len(cells) >= 3:
-                    ts = cells[0]
-                    content = cells[1]
-                    stars = cells[2]
+                    ts, content, stars = cells[0], cells[1], cells[2]
                     importance = stars.count("★")
                     timestamp = 0
-                    parts = ts.split(":")
-                    if len(parts) == 2:
-                        timestamp = int(parts[0]) * 60 + int(parts[1])
-                    elif len(parts) == 3:
-                        timestamp = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                    parts_ts = ts.split(":")
+                    if len(parts_ts) == 2:
+                        timestamp = int(parts_ts[0]) * 60 + int(parts_ts[1])
+                    elif len(parts_ts) == 3:
+                        timestamp = int(parts_ts[0]) * 3600 + int(parts_ts[1]) * 60 + int(parts_ts[2])
                     result["keypoints"].append({
                         "timestamp": timestamp, "content": content, "importance": importance,
                     })
+                    pending = None
+                else:
+                    # Incomplete row (content wrapped to next line)
+                    pending = cells  # cells may be [ts] or [ts, content_part]
             elif in_table and not line.startswith("|"):
-                break
+                if pending and len(pending) >= 1:
+                    # Continuation of previous row
+                    tail_parts = line.strip().split("|")
+                    if len(tail_parts) >= 2:
+                        # Has stars column: complete the row
+                        content = (pending[1].strip() if len(pending) >= 2 else "") + tail_parts[0].strip()
+                        stars = tail_parts[1].strip()
+                        ts = pending[0]
+                        importance = stars.count("★")
+                        timestamp = 0
+                        parts_ts = ts.split(":")
+                        if len(parts_ts) == 2:
+                            timestamp = int(parts_ts[0]) * 60 + int(parts_ts[1])
+                        elif len(parts_ts) == 3:
+                            timestamp = int(parts_ts[0]) * 3600 + int(parts_ts[1]) * 60 + int(parts_ts[2])
+                        result["keypoints"].append({
+                            "timestamp": timestamp, "content": content, "importance": importance,
+                        })
+                    pending = None
+                else:
+                    break
 
     # Parse subtitles
     sub = folder / "subtitles.md"

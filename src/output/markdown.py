@@ -141,7 +141,8 @@ def _gen_keypoints(result: AnalysisResult, base_name: str, folder: Path, concept
     ]
     for kp in result.keypoints:
         stars = "★" * kp.importance + "☆" * (5 - kp.importance)
-        lines.append(f"| {_fmt_time(kp.timestamp)} | {kp.content} | {stars} |")
+        content = kp.content.replace("\n", " ").replace("|", "｜")
+        lines.append(f"| {_fmt_time(kp.timestamp)} | {content} | {stars} |")
     lines.append("")
     filepath.write_text("\n".join(lines), encoding="utf-8")
     return str(filepath.relative_to(_OUTPUT_DIR))
