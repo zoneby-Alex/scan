@@ -63,33 +63,46 @@ def _detect_device():
 
 
 def _get_model():
-    global _whisper_model
-    if _whisper_model is None:
-        os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
-        from faster_whisper import WhisperModel
-        device, compute, model_size = _detect_device()
+    global _whisper_model, _model_size, _device, _compute_type
+    if _whisper_model is not None:
+        return _whisper_model
 
-        try:
-            _whisper_model = WhisperModel(model_size, device=device, compute_type=compute, num_workers=2)
-            if device == "cuda":
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+    from faster_whisper import WhisperModel
+
+    device, compute, model_size = _detect_device()
+
+    if device == "cuda":
+        # Try medium first (better accuracy), fall back to small
+        for model_size, compute in [("medium", "int8_float16"), ("small", "float16")]:
+            try:
+                _whisper_model = WhisperModel(model_size, device="cuda",
+                    compute_type=compute, num_workers=2)
                 import numpy as np
                 _whisper_model.encode(np.zeros((1, 80, 3000), dtype=np.float32))
-            print(f"[Whisper] Model loaded: {model_size} on {device}/{compute}")
-        except Exception as e:
-            print(f"[Whisper] GPU init failed ({e}), falling back to CPU")
-            device = "cpu"
-            model_size = "tiny"
-            for compute in ("int8_float16", "int8"):
-                try:
-                    _whisper_model = WhisperModel(model_size, device=device, compute_type=compute, num_workers=2)
-                    print(f"[Whisper] Model loaded: {model_size} on {device}/{compute}")
-                    break
-                except Exception:
-                    continue
-            else:
-                raise RuntimeError("无法加载 Whisper 模型（CPU/GPU 均不可用）")
+                _device = "cuda"
+                _compute_type = compute
+                _model_size = model_size
+                print(f"[Whisper] Model loaded: {model_size} on cuda/{compute}")
+                return _whisper_model
+            except Exception as e:
+                print(f"[Whisper] {model_size} on cuda/{compute} failed: {e}")
 
-    return _whisper_model
+    # CPU fallback: small model
+    device = "cpu"
+    model_size = "small"
+    for compute in ("int8", "int8_float16"):
+        try:
+            _whisper_model = WhisperModel(model_size, device="cpu",
+                compute_type=compute, num_workers=2)
+            _device = "cpu"
+            _compute_type = compute
+            _model_size = model_size
+            print(f"[Whisper] Model loaded: {model_size} on cpu/{compute}")
+            return _whisper_model
+        except Exception:
+            continue
+    raise RuntimeError("无法加载 Whisper 模型（CPU/GPU 均不可用）")
 
 
 def download_audio(url: str, progress_cb=None) -> Path:
@@ -190,8 +203,14 @@ def transcribe(audio_path: Path, progress_cb=None) -> list[SubtitleEntry]:
     segments, info = model.transcribe(
         str(audio_path),
         beam_size=1,
-        language="zh",
+        language=None,
         vad_filter=True,
+        vad_parameters={
+            "threshold": 0.5,
+            "min_speech_duration_ms": 250,
+            "min_silence_duration_ms": 400,
+            "speech_pad_ms": 400,
+        },
         word_timestamps=False,
     )
 
