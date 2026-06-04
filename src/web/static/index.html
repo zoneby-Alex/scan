@@ -43,12 +43,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 #sidebar.collapsed + #sidebarToggle { left: 0; top: 60px; }
 .history-item { padding: 10px 8px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; transition: background 0.15s; }
 .history-item:hover { background: var(--border); }
-.history-item.active { background: var(--accent); color: #fff; }
+.history-item.active { background: color-mix(in srgb, var(--accent) 15%, transparent); color: inherit; }
 .history-item .hi-title { font-size: 0.82rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
 .history-item .hi-time { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
-.history-item.active .hi-time { color: rgba(255,255,255,0.7); }
+.history-item.active .hi-time { color: var(--muted); }
 .history-item .hi-path { font-size: 0.62rem; margin-bottom: 2px; display: inline-block; border-radius: 3px; padding: 0 5px; opacity: 0.9; }
-.history-item.active .hi-path { color: #fff; border-color: rgba(255,255,255,0.6); }
+.history-item.active .hi-path { opacity: 1; }
 
 /* ── Sidebar group headers ─────────── */
 .hi-group { margin-bottom: 8px; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; }
@@ -240,12 +240,12 @@ async function loadHistory() {
 
       for (const i of indices) {
         const h = currentHistory[i];
-        const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
+        const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:${color};border:1px solid ${color}88;border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
         html += `<div class="history-item" data-idx="${i}">
           <div style="display:flex;align-items:flex-start;gap:6px">
             <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
             <div style="flex:1;min-width:0" onclick="showHistory(${i})">
-              <div class="hi-path" style="color:${color};border:1px solid ${color}99">${esc(pathLabel)}</div>
+              <div class="hi-path" style="color:${color};border:1px solid ${color}99" title="${esc(path)}">${esc(pathLabel)}</div>
               <div class="hi-title">${esc(h.title)}</div>
               <div class="hi-time">${fmtDate(h.time)}</div>
               ${tagHtml}
