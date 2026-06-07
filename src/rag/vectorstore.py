@@ -3,7 +3,7 @@ from chromadb.utils import embedding_functions
 
 _client = PersistentClient(path="./.chromadb")
 _ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
+    model_name="BAAI/bge-m3"
 )
 
 

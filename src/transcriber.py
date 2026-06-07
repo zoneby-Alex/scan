@@ -1,7 +1,12 @@
+import logging
 import os
 import site
 import uuid
 from pathlib import Path
+
+from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _inject_cuda_path():
@@ -47,8 +52,8 @@ def _detect_device():
         if ctranslate2.get_cuda_device_count() > 0:
             _device = "cuda"
             _compute_type = "float16"
-            _model_size = "small"
-            print(f"[Whisper] GPU detected → model={_model_size}, device={_device}, compute={_compute_type}")
+            _model_size = settings.whisper_model or "small"
+            logger.info("GPU detected → model=%s, device=%s, compute=%s", _model_size, _device, _compute_type)
             return _device, _compute_type, _model_size
     except ImportError:
         pass
@@ -56,9 +61,9 @@ def _detect_device():
     import multiprocessing
     _device = "cpu"
     _compute_type = "int8_float16"
-    _model_size = "small"
+    _model_size = settings.whisper_model or "small"
     n_cores = multiprocessing.cpu_count()
-    print(f"[Whisper] No GPU → cpu/{_compute_type}, model={_model_size}, cores={n_cores}")
+    logger.info("No GPU → cpu/%s, model=%s, cores=%s", _compute_type, _model_size, n_cores)
     return _device, _compute_type, _model_size
 
 
@@ -73,8 +78,12 @@ def _get_model():
     device, compute, model_size = _detect_device()
 
     if device == "cuda":
-        # Try medium first (better accuracy), fall back to small
-        for model_size, compute in [("medium", "int8_float16"), ("small", "float16")]:
+        # Try user-configured model first, then medium, fall back to small
+        candidates = []
+        if settings.whisper_model:
+            candidates.append((settings.whisper_model, "int8_float16"))
+        candidates += [("medium", "int8_float16"), ("small", "float16")]
+        for model_size, compute in candidates:
             try:
                 _whisper_model = WhisperModel(model_size, device="cuda",
                     compute_type=compute, num_workers=2)
@@ -83,14 +92,14 @@ def _get_model():
                 _device = "cuda"
                 _compute_type = compute
                 _model_size = model_size
-                print(f"[Whisper] Model loaded: {model_size} on cuda/{compute}")
+                logger.info("Model loaded: %s on cuda/%s", model_size, compute)
                 return _whisper_model
             except Exception as e:
-                print(f"[Whisper] {model_size} on cuda/{compute} failed: {e}")
+                logger.warning("%s on cuda/%s failed: %s", model_size, compute, e)
 
-    # CPU fallback: small model
+    # CPU fallback: user-configured or small model
     device = "cpu"
-    model_size = "small"
+    model_size = settings.whisper_model or "small"
     for compute in ("int8", "int8_float16"):
         try:
             _whisper_model = WhisperModel(model_size, device="cpu",
@@ -98,7 +107,7 @@ def _get_model():
             _device = "cpu"
             _compute_type = compute
             _model_size = model_size
-            print(f"[Whisper] Model loaded: {model_size} on cpu/{compute}")
+            logger.info("Model loaded: %s on cpu/%s", model_size, compute)
             return _whisper_model
         except Exception:
             continue

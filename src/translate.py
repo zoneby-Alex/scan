@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from src.llm import chat
@@ -47,24 +48,40 @@ def translate_keypoints(kps: list[KeyPoint]) -> list[KeyPoint]:
     return kps
 
 
-def translate_subtitles(subs: list[SubtitleEntry], batch_size: int = 15) -> list[str]:
+async def translate_subtitles(subs: list[SubtitleEntry], batch_size: int = 15) -> list[str]:
     """Return translated lines aligned with subs indices."""
     translations: list[str] = [""] * len(subs)
-    for i in range(0, len(subs), batch_size):
-        batch = subs[i:i + batch_size]
+
+    async def _translate_batch(start: int) -> list[tuple[int, str]]:
+        batch = subs[start:start + batch_size]
         lines = [f"[{e.start:.0f}s] {e.text}" for e in batch]
         combined = "\n".join(lines)
         try:
-            result = chat(
+            result = await asyncio.to_thread(
+                chat,
                 "将以下英文内容翻译成简体中文，保持时间戳格式，每行对应翻译。只输出译文。",
                 combined,
                 max_tokens=4096,
             )
         except Exception:
-            continue
+            return []
+        parsed = []
         for j, line in enumerate(result.strip().split("\n")):
-            idx = i + j
+            idx = start + j
             if idx < len(subs):
                 m = re.match(r"^\[\d+s\]\s*(.+)", line)
-                translations[idx] = m.group(1) if m else line
+                parsed.append((idx, m.group(1) if m else line))
+        return parsed
+
+    sem = asyncio.Semaphore(3)  # translation is heavy, limit concurrency
+
+    async def bounded(start):
+        async with sem:
+            return await _translate_batch(start)
+
+    tasks = [bounded(i) for i in range(0, len(subs), batch_size)]
+    results = await asyncio.gather(*tasks)
+    for batch_result in results:
+        for idx, text in batch_result:
+            translations[idx] = text
     return translations

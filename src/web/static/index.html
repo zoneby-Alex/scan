@@ -206,7 +206,22 @@ let currentTaskId = null;
 let currentKeypoints = [];
 let currentSubtitles = [];
 let currentOverview = '';
+let currentVideoUrl = '';
+let currentPlatform = '';
 let currentHistory = [];
+
+function videoUrl(platform, url, seconds) {
+  if (!url) return '#';
+  if (platform === 'youtube') {
+    const m = url.match(/[?&]v=([\w-]{11})/);
+    if (m) return `https://youtu.be/${m[1]}?t=${Math.floor(seconds)}`;
+  }
+  if (platform === 'bilibili') {
+    const m = url.match(/video\/(BV[\w]+)/);
+    if (m) return `https://www.bilibili.com/video/${m[1]}/?t=${Math.floor(seconds)}`;
+  }
+  return url;
+}
 
 // ── History ────────────────────────
 async function loadHistory() {
@@ -301,6 +316,8 @@ function showHistory(idx) {
       if (d.url) document.getElementById('meta-line').innerHTML += ` | <a href="${esc(d.url)}" target="_blank" style="color:var(--accent)">原链</a>`;
       if (d.thumbnail) document.getElementById('thumb').src = d.thumbnail;
       else document.getElementById('thumb').src = '';
+      currentVideoUrl = d.url || '';
+      currentPlatform = d.platform || '';
 
       // Parse overview to extract summary line (between --- markers)
       let summary = '';
@@ -392,6 +409,8 @@ async function analyze() {
       currentKeypoints = d.keypoints;
       currentSubtitles = d.subtitles || [];
       currentOverview = d.overview || d.summary || '';
+      currentVideoUrl = d.url || '';
+      currentPlatform = d.platform || '';
       const isTranslated = d.translated || false;
       renderKeypoints(d.keypoints, isTranslated);
       renderSubtitles(currentSubtitles, isTranslated);
@@ -450,10 +469,23 @@ function renderKeypoints(kps, translated) {
       const [orig, zh] = k.content.split('\n');
       content = `${esc(orig)}<br><span style="color:var(--muted);font-size:0.85rem">${esc(zh)}</span>`;
     }
-    html += `<tr><td>${fmtTime(k.timestamp)}</td><td>${content}</td><td class="stars">${s}</td></tr>`;
+    html += `<tr><td><a href="${videoUrl(currentPlatform, currentVideoUrl, k.timestamp)}" target="_blank" style="color:var(--accent);text-decoration:none">${fmtTime(k.timestamp)}</a></td><td>${content}</td><td class="stars">${s}</td></tr>`;
   });
   html += '</table>';
   el.innerHTML = html;
+}
+function _subtitleLink(line) {
+  const m = line.match(/^\[(\d+):(\d{2})(?::(\d{2}))?\]/);
+  if (m) {
+    const h = m[3] ? parseInt(m[1]) : 0;
+    const mm = m[3] ? parseInt(m[2]) : parseInt(m[1]);
+    const ss = m[3] ? parseInt(m[3]) : parseInt(m[2]);
+    const sec = h * 3600 + mm * 60 + ss;
+    const ts = m[3] ? `${h}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${mm}:${String(ss).padStart(2,'0')}`;
+    const rest = line.slice(m[0].length);
+    return `<a href="${videoUrl(currentPlatform, currentVideoUrl, sec)}" target="_blank" style="color:var(--accent);text-decoration:none">[${ts}]</a>${esc(rest)}`;
+  }
+  return esc(line);
 }
 function renderSubtitles(lines, translated) {
   const el = document.getElementById('tab-subtitles');
@@ -461,9 +493,9 @@ function renderSubtitles(lines, translated) {
   el.innerHTML = lines.map(l => {
     if (translated && l.includes('\n')) {
       const [orig, zh] = l.split('\n');
-      return `<p style="margin:4px 0;font-size:0.9rem"><span style="color:var(--text)">${esc(orig)}</span><br><span style="color:var(--muted);font-size:0.82rem;padding-left:8px">${esc(zh)}</span></p>`;
+      return `<p style="margin:4px 0;font-size:0.9rem"><span style="color:var(--text)">${_subtitleLink(orig)}</span><br><span style="color:var(--muted);font-size:0.82rem;padding-left:8px">${esc(zh)}</span></p>`;
     }
-    return `<p style="margin:4px 0;font-size:0.9rem;color:var(--muted)">${esc(l)}</p>`;
+    return `<p style="margin:4px 0;font-size:0.9rem;color:var(--muted)">${_subtitleLink(l)}</p>`;
   }).join('');
 }
 function renderOverview(text) {

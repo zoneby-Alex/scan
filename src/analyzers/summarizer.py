@@ -1,3 +1,5 @@
+import asyncio
+
 from src.llm import chat, chat_json
 from src.models import Chapter, KeyPoint, SubtitleEntry
 
@@ -28,11 +30,11 @@ _CHUNK_SIZE = 15000  # chars per chunk for Map-Reduce
 _MAX_CHUNKS = 12      # safety cap
 
 
-def summarize(subtitles: list[SubtitleEntry], title: str, progress_cb=None) -> tuple[str, list[Chapter]]:
+async def summarize(subtitles: list[SubtitleEntry], title: str, progress_cb=None) -> tuple[str, list[Chapter]]:
     text = _build_timed_text(subtitles)
     if len(text) <= _CHUNK_SIZE:
-        return _summarize_short(text, title)
-    return _summarize_long(subtitles, title, progress_cb)
+        return await asyncio.to_thread(_summarize_short, text, title)
+    return await _summarize_long(subtitles, title, progress_cb)
 
 
 def _summarize_short(text: str, title: str) -> tuple[str, list[Chapter]]:
@@ -42,7 +44,7 @@ def _summarize_short(text: str, title: str) -> tuple[str, list[Chapter]]:
     return result, chapters
 
 
-def _summarize_long(subtitles: list[SubtitleEntry], title: str, progress_cb=None) -> tuple[str, list[Chapter]]:
+async def _summarize_long(subtitles: list[SubtitleEntry], title: str, progress_cb=None) -> tuple[str, list[Chapter]]:
     from src.preprocess.segmenter import build_text, segment
 
     segs = segment(subtitles)
@@ -70,36 +72,49 @@ def _summarize_long(subtitles: list[SubtitleEntry], title: str, progress_cb=None
         chunks.append(build_text(buf))
 
     total_chunks = len(chunks)
-    chunk_summaries = []
-    for i, chunk in enumerate(chunks):
+
+    async def _summarize_one(chunk: str, i: int) -> str:
         if progress_cb:
             progress_cb(f"摘要: {i + 1}/{total_chunks} 段")
-        s = chat(
+        return await asyncio.to_thread(
+            chat,
             f"请用2-3段话总结以下视频片段的内容（共{total_chunks}段中的第{i + 1}段）。",
             chunk,
             max_tokens=2048,
         )
-        chunk_summaries.append(s)
+
+    sem = asyncio.Semaphore(5)
+
+    async def bounded(chunk, i):
+        async with sem:
+            return await _summarize_one(chunk, i)
+
+    chunk_summaries = await asyncio.gather(*[bounded(c, i) for i, c in enumerate(chunks)])
 
     # Merge chunk summaries (2-level for very long videos)
     if total_chunks > 6:
         if progress_cb:
             progress_cb(f"摘要: 合并 {total_chunks} 段")
-        mid_summaries = []
-        for i in range(0, total_chunks, 3):
+
+        async def _merge_group(group_parts: list[str], group_idx: int) -> str:
             group = "\n\n".join(
-                f"=== 第{j + 1}部分 ===\n{chunk_summaries[j]}"
-                for j in range(i, min(i + 3, total_chunks))
+                f"=== 第{j + 1}部分 ===\n{group_parts[j]}"
+                for j in range(len(group_parts))
             )
-            ms = chat(
+            return await asyncio.to_thread(
+                chat,
                 "请将以下视频片段的摘要合并为一段连贯的总结。",
                 group,
                 max_tokens=1536,
             )
-            mid_summaries.append(ms)
+
+        merge_tasks = []
+        for i in range(0, total_chunks, 3):
+            merge_tasks.append(_merge_group(chunk_summaries[i:i + 3], i // 3))
+        mid_summaries = await asyncio.gather(*merge_tasks)
         merged = "\n\n".join(f"=== 第{i + 1}部分 ===\n{s}" for i, s in enumerate(mid_summaries))
     else:
-        merged = "\n\n".join(f"=== 第{i + 1}部分摘要 ===\n{s}" for i, s in enumerate(chunk_summaries))
+        merged = "\n\n".join(f"=== 第{i + 1}段摘要 ===\n{s}" for i, s in enumerate(chunk_summaries))
 
     if progress_cb:
         progress_cb("摘要: 生成最终总结")
@@ -109,11 +124,11 @@ def _summarize_long(subtitles: list[SubtitleEntry], title: str, progress_cb=None
     return result, chapters
 
 
-def extract_keypoints(subtitles: list[SubtitleEntry], title: str, progress_cb=None) -> list[KeyPoint]:
+async def extract_keypoints(subtitles: list[SubtitleEntry], title: str, progress_cb=None) -> list[KeyPoint]:
     text = _build_timed_text(subtitles)
 
     if len(text) <= _CHUNK_SIZE * 2:
-        return _extract_kp_direct(text, title)
+        return await asyncio.to_thread(_extract_kp_direct, text, title)
 
     # For long videos: chunk → extract per chunk → deduplicate
     from src.preprocess.segmenter import build_text, segment
@@ -133,12 +148,20 @@ def extract_keypoints(subtitles: list[SubtitleEntry], title: str, progress_cb=No
     if buf:
         chunks.append(build_text(buf))
 
-    all_kps: list[KeyPoint] = []
-    for i, chunk in enumerate(chunks):
+    async def _extract_one(chunk: str, i: int) -> list[KeyPoint]:
         if progress_cb:
             progress_cb(f"重点提取: {i + 1}/{len(chunks)} 段")
-        kps = _extract_kp_direct(chunk, f"{title} (第{i + 1}段)")
-        all_kps.extend(kps)
+        return await asyncio.to_thread(_extract_kp_direct, chunk, f"{title} (第{i + 1}段)")
+
+    sem = asyncio.Semaphore(5)
+    async def bounded(chunk, i):
+        async with sem:
+            return await _extract_one(chunk, i)
+
+    results = await asyncio.gather(*[bounded(c, i) for i, c in enumerate(chunks)])
+    all_kps: list[KeyPoint] = []
+    for r in results:
+        all_kps.extend(r)
 
     # Deduplicate by content similarity, keep highest importance
     all_kps.sort(key=lambda k: k.importance, reverse=True)
