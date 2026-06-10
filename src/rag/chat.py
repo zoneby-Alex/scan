@@ -1,5 +1,5 @@
 from src.llm import chat
-from src.rag.vectorstore import index_subtitles, search
+from src.rag.vectorstore import index_subtitles, search, search_global
 
 _CHAT_SYSTEM = """你是一个视频内容问答助手。根据提供的视频字幕片段回答用户问题。
 
@@ -10,6 +10,10 @@ _CHAT_SYSTEM = """你是一个视频内容问答助手。根据提供的视频�
 4. 保持回答简洁、准确
 5. 用中文回答（除非字幕本身是英文）"""
 
+_GLOBAL_SYSTEM = """基于以下所有视频的字幕片段回答问题。
+如果引用了某个视频的内容，标注来源视频名称。
+如果无法找到相关信息，请如实说不知道。"""
+
 
 def build_index(task_id: str, texts: list[str], timestamps: list[float]):
     segments = [
@@ -19,7 +23,7 @@ def build_index(task_id: str, texts: list[str], timestamps: list[float]):
     index_subtitles(task_id, segments)
 
 
-def ask(task_id: str, question: str) -> str:
+def ask(task_id: str, question: str, history: list[dict] | None = None) -> str:
     results = search(task_id, question, k=5)
     if not results:
         return "视频中未提及相关内容。"
@@ -29,6 +33,19 @@ def ask(task_id: str, question: str) -> str:
     )
     prompt = f"字幕片段:\n{context}\n\n用户问题: {question}"
     return chat(_CHAT_SYSTEM, prompt)
+
+
+def global_ask(question: str) -> str:
+    """Ask a question across all indexed videos."""
+    results = search_global(question, k=5)
+    if not results:
+        return "所有视频中未找到相关内容。"
+    context = "\n\n".join(
+        f"[{r['source']} @ {_fmt_ts(r['timestamp'])}] {r['text']}"
+        for r in results
+    )
+    prompt = f"{_GLOBAL_SYSTEM}\n\n字幕片段:\n{context}\n\n用户问题: {question}"
+    return chat(_GLOBAL_SYSTEM, prompt)
 
 
 def _fmt_ts(seconds: float) -> str:

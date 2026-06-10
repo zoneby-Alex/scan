@@ -4,6 +4,7 @@ import queue
 import re
 import threading
 import time
+import uuid
 from pathlib import Path
 
 import yt_dlp
@@ -38,6 +39,16 @@ if settings.bilibili_cookies:
     _BILI_YTDLP_OPTS.setdefault("extractor_args", {"bilibili": {"skip_login": ["true"]}})
 
 SSE_EVENTS: dict[str, queue.Queue] = {}
+_running_tasks: dict[str, threading.Event] = {}
+
+
+def cancel_task(task_id: str) -> bool:
+    """Signal a running pipeline to cancel. Returns True if task was found."""
+    event = _running_tasks.get(task_id)
+    if event:
+        event.set()
+        return True
+    return False
 
 
 def push(task_id: str, event: str, data: str = ""):
@@ -45,6 +56,11 @@ def push(task_id: str, event: str, data: str = ""):
     if task_id not in SSE_EVENTS:
         return
     SSE_EVENTS[task_id].put({"event": event, "data": data})
+
+
+def make_task_id() -> str:
+    """Generate a unique task_id using UUID (for batches)."""
+    return "v_" + uuid.uuid4().hex[:32]
 
 
 def sanitize_task_id(raw: str) -> str:
@@ -61,10 +77,15 @@ def sanitize_task_id(raw: str) -> str:
     return cleaned[:63]
 
 
-async def run_pipeline(url: str, task_id: str):
+async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
     """Full analysis pipeline. Pushes progress events via SSE_EVENTS."""
+    cancel_event = threading.Event()
+    _running_tasks[task_id] = cancel_event
     audio_path = None
     try:
+        if cancel_event.is_set():
+            push(task_id, "error", "任务已取消")
+            return
         push(task_id, "status", "提取字幕中...")
         extractor = get_extractor(url)
         title = author = thumb = ""
@@ -119,6 +140,10 @@ async def run_pipeline(url: str, task_id: str):
             push(task_id, "error", "该视频没有可用字幕，语音识别也未获取到内容")
             return
 
+        if cancel_event.is_set():
+            push(task_id, "error", "任务已取消")
+            return
+
         push(task_id, "status", f"字幕获取成功 ({len(meta.subtitles)} 条)，预处理中...")
 
         subs = clean(meta.subtitles)
@@ -126,6 +151,10 @@ async def run_pipeline(url: str, task_id: str):
         subs = merge_short(subs)
 
         push(task_id, "status", f"预处理完成 ({len(subs)} 条)，AI 分析中...")
+
+        if cancel_event.is_set():
+            push(task_id, "error", "任务已取消")
+            return
 
         summary_text, chapters = await summarize(
             subs, meta.title,
@@ -171,6 +200,8 @@ async def run_pipeline(url: str, task_id: str):
         )
 
         base_name = re.sub(r"[\\/:*?\"<>|' ]", "_", meta.title)[:60]
+        if parent_dir:
+            base_name = f"{parent_dir}/{base_name}"
         files = await asyncio.to_thread(generate_all, result, base_name, concepts=concepts)
 
         # Persist metadata for history
@@ -199,6 +230,14 @@ async def run_pipeline(url: str, task_id: str):
         seg_starts = [s[0].start for s in segs]
         await asyncio.to_thread(build_index, task_id, seg_texts, seg_starts)
 
+        # Also index into the global cross-video collection
+        from src.rag.vectorstore import index_global
+        global_segs = [
+            (f"{task_id}_{i}", t, seg_starts[i], base_name)
+            for i, t in enumerate(seg_texts)
+        ]
+        await asyncio.to_thread(index_global, global_segs)
+
         # Build subtitle text preview
         sub_lines = []
         for e in subs[:500]:
@@ -223,12 +262,21 @@ async def run_pipeline(url: str, task_id: str):
             "subtitles": sub_lines,
             "overview": summary_text,
             "translated": translated,
+            "base_name": base_name,
         }))
     except Exception as e:
         push(task_id, "error", str(e))
     finally:
+        _running_tasks.pop(task_id, None)
         if audio_path:
             try:
                 await asyncio.to_thread(cleanup_audio, audio_path)
             except Exception:
                 pass
+        # Clean up empty temp directories
+        try:
+            for d in _TEMP_VIDEO_DIR.iterdir():
+                if d.is_dir() and not any(d.iterdir()):
+                    d.rmdir()
+        except Exception:
+            pass

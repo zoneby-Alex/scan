@@ -30,11 +30,11 @@
   --success: #27ae60;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; }
 
 /* ── Sidebar ──────────────────────── */
-#sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 12px; overflow: hidden; transition: width 0.25s, min-width 0.25s, padding 0.25s; }
-#sidebar.collapsed { width: 0; min-width: 0; padding: 16px 0; border-right: none; }
+#sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100vh; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 12px; overflow: hidden; transition: width 0.25s, min-width 0.25s, padding 0.25s; }
+#sidebar.collapsed { width: 0; min-width: 0; padding: 16px 0; border-right: none; overflow: hidden; }
 #sidebar h2 { font-size: 0.95rem; color: var(--accent); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; white-space: nowrap; }
 #sidebar h2 button { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); cursor: pointer; font-size: 0.7rem; padding: 2px 6px; }
 #sidebar h2 button:hover { border-color: var(--accent); color: var(--accent); }
@@ -61,7 +61,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .hi-group.collapsed .hi-group-arrow { transform: rotate(-90deg); }
 
 /* ── Main ─────────────────────────── */
-#main { flex: 1; padding: 24px 20px; overflow-y: auto; }
+#main { flex: 1; height: 100vh; padding: 24px 20px; overflow-y: auto; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .header h1 { font-size: 1.5rem; color: var(--accent); }
 #themeToggle { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text); cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; }
@@ -106,8 +106,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tab-content table td { padding: 8px; border-bottom: 1px solid var(--bg); vertical-align: top; }
 .tab-content .stars { color: #f1c40f; white-space: nowrap; }
 .downloads { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-.downloads a { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 0.85rem; }
-.downloads a:hover { border-color: var(--accent); color: var(--accent); }
+.downloads a, .downloads button { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 0.85rem; background: none; cursor: pointer; font-family: inherit; }
+.downloads a:hover, .downloads button:hover { border-color: var(--accent); color: var(--accent); }
+.downloads .export-btn { border-color: var(--accent); color: var(--accent); }
+.downloads .export-btn:hover { background: var(--accent); color: #fff; }
 .chat-section { margin-top: 24px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
 .chat-section h3 { font-size: 1rem; margin-bottom: 12px; color: var(--muted); }
 .chat-log { max-height: 300px; overflow-y: auto; margin-bottom: 12px; }
@@ -122,6 +124,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .streaming { animation: pulse 1s infinite; }
 .empty-history { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 20px 0; }
+
+/* ── Markdown rendered content ─────── */
+.md-rendered { line-height: 1.7; font-size: 0.9rem; }
+.md-rendered h1, .md-rendered h2, .md-rendered h3 { margin: 16px 0 8px; color: var(--accent); }
+.md-rendered h1 { font-size: 1.1rem; }
+.md-rendered h2 { font-size: 1rem; }
+.md-rendered h3 { font-size: 0.95rem; }
+.md-rendered hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.md-rendered p { margin: 8px 0; }
+.md-rendered strong { color: var(--text); font-weight: 600; }
+.md-rendered code { background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 0.85em; }
+.md-rendered pre { background: var(--bg); padding: 10px; border-radius: 4px; overflow-x: auto; margin: 8px 0; }
+.md-rendered pre code { background: none; padding: 0; }
+.md-rendered ul, .md-rendered ol { margin: 8px 0; padding-left: 24px; }
+.md-rendered li { margin: 3px 0; }
+.md-rendered table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 8px 0; }
+.md-rendered th, .md-rendered td { padding: 6px 8px; border: 1px solid var(--border); text-align: left; }
+.md-rendered a { color: var(--accent); text-decoration: none; }
+.md-rendered a:hover { text-decoration: underline; }
+
+/* ── Print ─────────────────────────── */
+@media print {
+  body { background: #fff !important; color: #000 !important; height: auto; overflow: visible; display: block; }
+  #sidebar, #sidebarToggle, .input-box, #progress, #error, .tabs, .downloads, .chat-section, .header button { display: none !important; }
+  #main { padding: 0; height: auto; overflow: visible; }
+  .header { margin-bottom: 12px; }
+  .header h1 { color: #000 !important; font-size: 1.2rem; }
+  .hero { background: #fff !important; border: 1px solid #ccc !important; box-shadow: none; page-break-inside: avoid; }
+  .hero img { width: 120px; height: 68px; }
+  .tab-content { display: block !important; max-height: none !important; overflow: visible !important; background: #fff !important; border: 1px solid #ccc !important; margin-bottom: 12px; page-break-inside: auto; }
+  .tab-content::before { content: attr(data-print-title); display: block; font-weight: bold; font-size: 1rem; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #ccc; }
+  table th, table td { color: #000 !important; }
+  a { color: #000 !important; text-decoration: none; }
+}
 </style>
 </head>
 <body data-theme="dark">
@@ -154,6 +190,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="transcribeBar" class="bar-row">
       <span>语音识别</span><progress value="0" max="100"></progress><span>0%</span>
     </div>
+    <button id="cancelBtn" onclick="cancelTask()" style="display:none;margin-top:8px;padding:4px 12px;background:none;border:1px solid var(--danger);border-radius:4px;color:var(--danger);cursor:pointer;font-size:0.8rem">取消</button>
   </div>
   <div id="error" class="error"></div>
   <div id="result" class="result">
@@ -170,12 +207,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="tab-btn" onclick="switchTab('subtitles')">完整字幕</button>
       <button class="tab-btn" onclick="switchTab('overview')">内容概览</button>
     </div>
-    <div id="tab-keypoints" class="tab-content active"></div>
-    <div id="tab-subtitles" class="tab-content"></div>
-    <div id="tab-overview" class="tab-content"></div>
+    <div id="tab-keypoints" class="tab-content active" data-print-title="重点标示"></div>
+    <div id="tab-subtitles" class="tab-content" data-print-title="完整字幕"></div>
+    <div id="tab-overview" class="tab-content" data-print-title="内容概览"></div>
     <div class="downloads" id="downloads"></div>
     <div class="chat-section">
-      <h3>对视频内容提问</h3>
+      <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>对视频内容提问</span>
+        <label style="font-size:0.75rem;cursor:pointer;user-select:none">
+          <input type="checkbox" id="globalToggle" onchange="updateChatHint()">
+          搜索所有视频
+        </label>
+      </h3>
       <div class="chat-log" id="chatLog"></div>
       <div class="chat-input">
         <input type="text" id="chatInput" placeholder="问一个关于视频内容的问题..." onkeydown="if(event.key==='Enter')ask()" />
@@ -233,34 +276,68 @@ async function loadHistory() {
       list.innerHTML = '<div class="empty-history">暂无记录</div>';
       return;
     }
-    // Group by path
-    const groups = {};
+    const pathGroups = {};
     currentHistory.forEach((h, i) => {
-      const key = h.path || '未知';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(i);
+      const p = h.path || '未知';
+      if (!pathGroups[p]) pathGroups[p] = { items: [], subs: {} };
+      const bn = h.base_name || '';
+      const slash = bn.indexOf('\\');
+      if (slash > 0) {
+        const sub = bn.substring(0, slash);
+        if (!pathGroups[p].subs[sub]) pathGroups[p].subs[sub] = [];
+        pathGroups[p].subs[sub].push(i);
+      } else {
+        pathGroups[p].items.push(i);
+      }
     });
 
     let html = '';
-    for (const [path, indices] of Object.entries(groups)) {
-      const pathLabel = pathShort(path);
+    for (const [path, pg] of Object.entries(pathGroups)) {
       const color = pathColor(path);
+      const label = pathShort(path);
+      const total = pg.items.length + Object.values(pg.subs).reduce((a, v) => a + v.length, 0);
       html += `<div class="hi-group" style="border-left-color:${color}">
         <div class="hi-group-header" style="color:${color};background:${color}18" onclick="this.parentElement.classList.toggle('collapsed')">
           <span class="hi-group-arrow">▼</span>
-          <span class="hi-group-name" title="${esc(path)}">${esc(pathLabel)}</span>
-          <span class="hi-group-count">${indices.length}</span>
+          <span class="hi-group-name" title="${esc(path)}">${esc(label)}</span>
+          <span class="hi-group-count">${total}</span>
         </div>
         <div class="hi-group-body">`;
 
-      for (const i of indices) {
+      // Sub-directory groups
+      for (const [sub, idxs] of Object.entries(pg.subs)) {
+        html += `<div class="hi-group" style="margin:4px 0 4px 6px;border-left-color:${color}">
+          <div class="hi-group-header" style="color:${color};background:${color}10;font-size:0.7rem;padding:3px 6px" onclick="this.parentElement.classList.toggle('collapsed')">
+            <span class="hi-group-arrow">▼</span>
+            <span class="hi-group-name" title="${esc(sub)}">📁 ${esc(sub)}</span>
+            <span class="hi-group-count">${idxs.length}</span>
+          </div>
+          <div class="hi-group-body">`;
+        for (const i of idxs) {
+          const h = currentHistory[i];
+          const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:${color};border:1px solid ${color}88;border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
+          html += `<div class="history-item" data-idx="${i}">
+          <div style="display:flex;align-items:flex-start;gap:6px">
+            <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
+            <div style="flex:1;min-width:0" onclick="showHistory(${i})">
+              <div class="hi-title">${esc(h.title)}</div>
+              <div class="hi-time">${fmtDate(h.time)}</div>
+              ${tagHtml}
+          </div>
+        </div></div>`;
+        }
+        html += '</div></div>';
+      }
+
+      // Root-level items
+      for (const i of pg.items) {
         const h = currentHistory[i];
         const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:${color};border:1px solid ${color}88;border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
         html += `<div class="history-item" data-idx="${i}">
           <div style="display:flex;align-items:flex-start;gap:6px">
             <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
             <div style="flex:1;min-width:0" onclick="showHistory(${i})">
-              <div class="hi-path" style="color:${color};border:1px solid ${color}99" title="${esc(path)}">${esc(pathLabel)}</div>
+              <div class="hi-path" style="color:${color};border:1px solid ${color}99" title="${esc(path)}">${esc(label)}</div>
               <div class="hi-title">${esc(h.title)}</div>
               <div class="hi-time">${fmtDate(h.time)}</div>
               ${tagHtml}
@@ -319,22 +396,18 @@ function showHistory(idx) {
       currentVideoUrl = d.url || '';
       currentPlatform = d.platform || '';
 
-      // Parse overview to extract summary line (between --- markers)
-      let summary = '';
-      if (d.overview) {
-        const parts = d.overview.split('---');
-        if (parts.length >= 2) summary = parts.slice(1).join(' ').trim().substring(0, 500);
-      }
-      document.getElementById('summaryLine').textContent = summary || '无摘要';
+      // Parse summary line from overview (skip frontmatter and markdown noise)
+      document.getElementById('summaryLine').textContent = extractFirstSentence(d.overview) || '无摘要';
 
       // Render tabs
+      const isTranslated = d.translated || false;
       if (d.keypoints && d.keypoints.length) {
-        renderKeypoints(d.keypoints);
+        renderKeypoints(d.keypoints, isTranslated);
       } else {
         document.getElementById('tab-keypoints').innerHTML = '<p style="color:var(--muted)">暂无重点</p>';
       }
       if (d.subtitles && d.subtitles.length) {
-        renderSubtitles(d.subtitles);
+        renderSubtitles(d.subtitles, isTranslated);
       } else {
         document.getElementById('tab-subtitles').innerHTML = '<p style="color:var(--muted)">暂无字幕</p>';
       }
@@ -345,11 +418,7 @@ function showHistory(idx) {
       }
 
       // Downloads
-      document.getElementById('downloads').innerHTML = Object.entries(h.files).map(([k, v]) => {
-        const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示', srt: 'SRT 字幕' };
-        const ext = k === 'srt' ? '' : ' (.md)';
-        return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k}${ext}</a>`;
-      }).join('');
+      renderDownloads(h.files, h.base_name);
 
       document.getElementById('statusLine').textContent = '已加载历史记录';
       document.getElementById('statusLine').style.color = 'var(--success)';
@@ -380,6 +449,10 @@ function fmtDate(ts) {
 async function analyze() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) return;
+  // Detect playlist URL
+  if (url.includes('playlist?list=')) {
+    return analyzePlaylist(url);
+  }
   const btn = document.getElementById('analyzeBtn');
   const err = document.getElementById('error');
   const result = document.getElementById('result');
@@ -390,6 +463,7 @@ async function analyze() {
   document.getElementById('statusLine').style.color = 'var(--accent)';
   resetBar('downloadBar');
   resetBar('transcribeBar');
+  document.getElementById('cancelBtn').style.display = 'inline-block';
 
   try {
     const r = await fetch(`/api/analyze?url=${encodeURIComponent(url)}`, { method: 'POST' });
@@ -405,25 +479,27 @@ async function analyze() {
       document.getElementById('title').textContent = d.title;
       document.getElementById('meta-line').textContent = `作者: ${d.author} | 时长: ${fmtDuration(d.duration)}`;
       if (d.thumbnail) document.getElementById('thumb').src = d.thumbnail;
-      document.getElementById('summaryLine').textContent = d.summary;
+      document.getElementById('summaryLine').textContent = extractFirstSentence(d.overview || d.summary);
       currentKeypoints = d.keypoints;
       currentSubtitles = d.subtitles || [];
       currentOverview = d.overview || d.summary || '';
       currentVideoUrl = d.url || '';
       currentPlatform = d.platform || '';
+      chatHistory = [];
       const isTranslated = d.translated || false;
       renderKeypoints(d.keypoints, isTranslated);
       renderSubtitles(currentSubtitles, isTranslated);
       renderOverview(currentOverview);
-      renderDownloads(d.files);
+      renderDownloads(d.files, d.base_name);
       document.getElementById('statusLine').textContent = '分析完成';
       document.getElementById('statusLine').style.color = 'var(--success)';
       hideBar('downloadBar');
       hideBar('transcribeBar');
       result.classList.add('show');
       btn.disabled = false;
+      document.getElementById('cancelBtn').style.display = 'none';
       es.close();
-      loadHistory(); // Refresh sidebar
+      loadHistory();
     });
     es.addEventListener('error', e => {
       err.textContent = '错误: ' + (e.data || '未知错误');
@@ -432,9 +508,65 @@ async function analyze() {
       hideBar('downloadBar');
       hideBar('transcribeBar');
       btn.disabled = false;
+      document.getElementById('cancelBtn').style.display = 'none';
       es.close();
     });
     es.onerror = () => { es.close(); };
+  } catch(e) {
+    err.textContent = '请求失败: ' + e.message;
+    err.style.display = 'block';
+    btn.disabled = false;
+  }
+}
+
+async function cancelTask() {
+  try {
+    await fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' });
+  } catch(e) {}
+  document.getElementById('statusLine').textContent = '已取消';
+  document.getElementById('statusLine').style.color = 'var(--danger)';
+  document.getElementById('cancelBtn').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+async function analyzePlaylist(url) {
+  const btn = document.getElementById('analyzeBtn');
+  const err = document.getElementById('error');
+  const result = document.getElementById('result');
+  btn.disabled = true;
+  err.style.display = 'none';
+  result.classList.remove('show');
+  document.getElementById('statusLine').textContent = '解析播放列表中...';
+  document.getElementById('statusLine').style.color = 'var(--accent)';
+  resetBar('downloadBar');
+  resetBar('transcribeBar');
+  document.getElementById('cancelBtn').style.display = 'inline-block';
+
+  try {
+    const r = await fetch(`/api/analyze/playlist?url=${encodeURIComponent(url)}`, { method: 'POST' });
+    if (!r.ok) throw new Error('批量解析失败');
+    const { batch_id, total } = await r.json();
+    document.getElementById('statusLine').textContent = `批量分析: 0/${total}`;
+
+    const es = new EventSource(`/api/progress/batch/${batch_id}`);
+    es.addEventListener('batch_progress', e => {
+      const d = JSON.parse(e.data);
+      document.getElementById('statusLine').textContent = `批量分析: ${d.done}/${d.total}`;
+    });
+    es.addEventListener('batch_done', e => {
+      document.getElementById('statusLine').textContent = '批量分析完成';
+      document.getElementById('statusLine').style.color = 'var(--success)';
+      btn.disabled = false;
+      document.getElementById('cancelBtn').style.display = 'none';
+      es.close();
+      loadHistory();
+    });
+    es.addEventListener('error', e => {
+      err.textContent = '批量分析错误: ' + (e.data || '未知错误');
+      err.style.display = 'block';
+      btn.disabled = false;
+      es.close();
+    });
   } catch(e) {
     err.textContent = '请求失败: ' + e.message;
     err.style.display = 'block';
@@ -501,15 +633,20 @@ function renderSubtitles(lines, translated) {
 function renderOverview(text) {
   const el = document.getElementById('tab-overview');
   if (!text) { el.innerHTML = '<p style="color:var(--muted)">暂未加载</p>'; return; }
-  el.innerHTML = `<div style="white-space:pre-wrap;line-height:1.7;font-size:0.9rem">${esc(text)}</div>`;
+  el.innerHTML = `<div class="md-rendered">${mdToHtml(text)}</div>`;
 }
-function renderDownloads(files) {
+function renderDownloads(files, baseName) {
   const el = document.getElementById('downloads');
   const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示', srt: 'SRT 字幕' };
-  el.innerHTML = Object.entries(files).map(([k, v]) => {
+  const downloads = Object.entries(files).map(([k, v]) => {
     const ext = k === 'srt' ? '' : ' (.md)';
     return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k}${ext}</a>`;
   }).join('');
+  const exports = baseName
+    ? `<button class="export-btn" onclick="window.print()" title="浏览器打印对话框，可保存为 PDF">📄 打印 / PDF</button>
+       <a class="export-btn" href="/api/export/${encodeURIComponent(baseName)}?format=html">📦 导出 HTML</a>`
+    : `<button class="export-btn" onclick="window.print()">📄 打印 / PDF</button>`;
+  el.innerHTML = downloads + exports;
 }
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -521,6 +658,15 @@ function switchTab(name) {
 }
 
 // ── Chat ───────────────────────────
+let chatHistory = [];
+
+function updateChatHint() {
+  const isGlobal = document.getElementById('globalToggle').checked;
+  document.getElementById('chatInput').placeholder = isGlobal
+    ? '向所有已分析视频提问...'
+    : '问一个关于视频内容的问题...';
+}
+
 async function ask() {
   const input = document.getElementById('chatInput');
   const q = input.value.trim();
@@ -534,9 +680,26 @@ async function ask() {
   log.appendChild(aiDiv);
   log.scrollTop = log.scrollHeight;
   try {
-    const r = await fetch(`/api/chat?task_id=${currentTaskId}&q=${encodeURIComponent(q)}`);
-    const d = await r.json();
-    aiDiv.textContent = d.answer || '无法回答';
+    const isGlobal = document.getElementById('globalToggle').checked;
+    if (isGlobal) {
+      const r = await fetch(`/api/chat/global?q=${encodeURIComponent(q)}`);
+      const d = await r.json();
+      aiDiv.textContent = d.answer || '无法回答';
+    } else {
+      chatHistory.push({"role": "user", "content": q});
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          task_id: currentTaskId,
+          q: q,
+          history: chatHistory.slice(-10),
+        }),
+      });
+      const d = await r.json();
+      chatHistory.push({"role": "assistant", "content": d.answer});
+      aiDiv.textContent = d.answer || '无法回答';
+    }
     aiDiv.classList.remove('streaming');
   } catch(e) {
     aiDiv.textContent = '请求失败: ' + e.message;
@@ -561,7 +724,69 @@ function fmtDuration(s) {
   return `${m}:${sec}`;
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-const PATH_COLORS = ['#00b894','#0984e3','#6c5ce7','#e17055','#fdcb6e','#00cec9','#e84393','#636e72','#d63031','#2d3436'];
+
+// ── Lightweight Markdown ───────────
+function stripFrontmatter(md) {
+  return (md || '').replace(/^---\n[\s\S]*?\n---\n?/, '');
+}
+
+function mdToHtml(md) {
+  md = stripFrontmatter(md);
+  // Code blocks first (preserve content)
+  const codes = [];
+  md = md.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
+    codes.push(`<pre><code>${esc(code)}</code></pre>`);
+    return `\x00CODE${codes.length - 1}\x00`;
+  });
+  // Tables (simple: header | sep | rows)
+  md = md.replace(/^(\|.+\|)\n(\|[\s|:-]+\|)\n((?:\|.+\|\n?)+)/gm, (_, h, _s, body) => {
+    const head = h.split('|').slice(1, -1).map(c => `<th>${esc(c.trim())}</th>`).join('');
+    const rows = body.trim().split('\n').map(r =>
+      '<tr>' + r.split('|').slice(1, -1).map(c => `<td>${esc(c.trim())}</td>`).join('') + '</tr>'
+    ).join('');
+    return `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  });
+  // Escape remaining HTML
+  md = esc(md);
+  // Headings
+  md = md.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+         .replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // Horizontal rule
+  md = md.replace(/^---+$/gm, '<hr>');
+  // Bold / italic / code (inline)
+  md = md.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+         .replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Links [text](url)
+  md = md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  // Lists (group consecutive lines)
+  md = md.replace(/(?:^- .+(?:\n|$))+/gm, m => {
+    const items = m.trim().split('\n').map(l => `<li>${l.replace(/^- /, '')}</li>`).join('');
+    return `<ul>${items}</ul>`;
+  });
+  // Paragraphs (consecutive non-tag lines)
+  md = md.split('\n\n').map(block => {
+    block = block.trim();
+    if (!block || block.startsWith('<')) return block;
+    return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+  // Restore code blocks
+  md = md.replace(/\x00CODE(\d+)\x00/g, (_, i) => codes[parseInt(i)]);
+  return md;
+}
+
+function extractFirstSentence(md, maxLen = 200) {
+  let text = stripFrontmatter(md || '');
+  text = text.replace(/^#+\s.+$/gm, '')            // headings
+             .replace(/^\*\*[^*]+\*\*[:：].*$/gm, '') // **来源**: ...
+             .replace(/^---+$/gm, '')               // hr
+             .replace(/```[\s\S]*?```/g, '')        // code blocks
+             .replace(/[*_`]/g, '')                 // inline emphasis chars
+             .trim();
+  const compact = text.split('\n').map(l => l.trim()).filter(l => l).join(' ');
+  return compact.length > maxLen ? compact.slice(0, maxLen) + '…' : compact;
+}
+const PATH_COLORS = ['#9b59b6', '#2e86de', '#10ac84', '#fca130'];
 let _pathColorIdx = {};
 function pathColor(p) {
   if (!p) return PATH_COLORS[0];

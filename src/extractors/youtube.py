@@ -14,13 +14,27 @@ from src.models import SubtitleEntry, VideoMeta
 _YT_URL_PATTERN = re.compile(
     r"(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([\w-]{11})"
 )
+_YT_PLAYLIST_PATTERN = re.compile(
+    r"(?:https?://)?(?:www\.)?youtube\.com/playlist\?list=([\w-]+)"
+)
+
+
+def extract_playlist_urls(url: str) -> list[str]:
+    """Expand a YouTube playlist URL into individual video URLs."""
+    with yt_dlp.YoutubeDL({"quiet": True, "extract_flat": True}) as ydl:
+        info = ydl.extract_info(url, download=False)
+        entries = info.get("entries", [])
+        return [
+            f"https://www.youtube.com/watch?v={e['id']}"
+            for e in entries if e.get("id")
+        ]
 
 
 class YouTubeExtractor(BaseExtractor):
     platform = "youtube"
 
     def match(self, url: str) -> bool:
-        return bool(_YT_URL_PATTERN.search(url))
+        return bool(_YT_URL_PATTERN.search(url)) or bool(_YT_PLAYLIST_PATTERN.search(url))
 
     def extract(self, url: str) -> VideoMeta:
         video_id = self._parse_video_id(url)
@@ -60,10 +74,16 @@ class YouTubeExtractor(BaseExtractor):
             candidates = manual + generated
 
             preferred = None
-            for lang_prefix in ("zh", "en", "ja", "ko"):
-                for t in candidates:
-                    if t.language_code.startswith(lang_prefix):
-                        preferred = t
+            # Two-pass: manual subtitles first (author-provided, more accurate),
+            # then auto-generated. Within each, prefer original-language tracks
+            # for English-source channels (en > zh > ja > ko).
+            for source in (manual, generated):
+                for lang_prefix in ("en", "zh", "ja", "ko"):
+                    for t in source:
+                        if t.language_code.startswith(lang_prefix):
+                            preferred = t
+                            break
+                    if preferred:
                         break
                 if preferred:
                     break
@@ -114,7 +134,7 @@ class YouTubeExtractor(BaseExtractor):
             "no_warnings": True,
             "writesubtitles": True,
             "writeautomaticsub": True,
-            "subtitleslangs": ["zh-Hans", "zh", "en"],
+            "subtitleslangs": ["en", "zh-Hans", "zh", "ja", "ko"],
             "skip_download": True,
             "outtmpl": "-",
         }
@@ -122,7 +142,7 @@ class YouTubeExtractor(BaseExtractor):
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             subs = info.get("subtitles", {}) or info.get("automatic_captions", {})
-            for lang in ("zh-Hans", "zh", "en"):
+            for lang in ("en", "zh-Hans", "zh", "ja", "ko"):
                 if lang in subs:
                     for fmt in subs[lang]:
                         if fmt.get("ext") in ("srv1", "srv2", "srv3", "json3"):

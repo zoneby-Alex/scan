@@ -7,12 +7,20 @@ from src.config import settings
 _client = Anthropic(**settings.anthropic_kwargs)
 
 
-def chat(system_prompt: str, user_message: str, *, model: str | None = None, max_tokens: int = 4096) -> str:
+def chat(
+    system_prompt: str,
+    user_message: str = "",
+    *,
+    model: str | None = None,
+    max_tokens: int = 4096,
+    messages: list[dict] | None = None,
+) -> str:
+    msgs = messages or [{"role": "user", "content": user_message}]
     r = _client.messages.create(
         model=model or settings.anthropic_model,
         max_tokens=max_tokens,
         system=system_prompt,
-        messages=[{"role": "user", "content": user_message}],
+        messages=msgs,
     )
     # Handle DeepSeek's ThinkingBlock (type="thinking") — find the text block
     for block in r.content:

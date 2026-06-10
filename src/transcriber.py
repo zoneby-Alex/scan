@@ -1,6 +1,7 @@
 import logging
 import os
 import site
+import threading
 import uuid
 from pathlib import Path
 
@@ -40,6 +41,7 @@ _whisper_model = None
 _device = None
 _compute_type = None
 _model_size = None
+_model_lock = threading.Lock()
 
 
 def _detect_device():
@@ -72,46 +74,47 @@ def _get_model():
     if _whisper_model is not None:
         return _whisper_model
 
-    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
-    from faster_whisper import WhisperModel
+    with _model_lock:
+        if _whisper_model is not None:
+            return _whisper_model
+        os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+        from faster_whisper import WhisperModel
 
-    device, compute, model_size = _detect_device()
+        device, compute, model_size = _detect_device()
 
-    if device == "cuda":
-        # Try user-configured model first, then medium, fall back to small
-        candidates = []
-        if settings.whisper_model:
-            candidates.append((settings.whisper_model, "int8_float16"))
-        candidates += [("medium", "int8_float16"), ("small", "float16")]
-        for model_size, compute in candidates:
+        if device == "cuda":
+            candidates = []
+            if settings.whisper_model:
+                candidates.append((settings.whisper_model, "int8_float16"))
+            candidates += [("medium", "int8_float16"), ("small", "float16")]
+            for model_size, compute in candidates:
+                try:
+                    _whisper_model = WhisperModel(model_size, device="cuda",
+                        compute_type=compute, num_workers=2)
+                    import numpy as np
+                    _whisper_model.encode(np.zeros((1, 80, 3000), dtype=np.float32))
+                    _device = "cuda"
+                    _compute_type = compute
+                    _model_size = model_size
+                    logger.info("Model loaded: %s on cuda/%s", model_size, compute)
+                    return _whisper_model
+                except Exception as e:
+                    logger.warning("%s on cuda/%s failed: %s", model_size, compute, e)
+
+        device = "cpu"
+        model_size = settings.whisper_model or "small"
+        for compute in ("int8", "int8_float16"):
             try:
-                _whisper_model = WhisperModel(model_size, device="cuda",
+                _whisper_model = WhisperModel(model_size, device="cpu",
                     compute_type=compute, num_workers=2)
-                import numpy as np
-                _whisper_model.encode(np.zeros((1, 80, 3000), dtype=np.float32))
-                _device = "cuda"
+                _device = "cpu"
                 _compute_type = compute
                 _model_size = model_size
-                logger.info("Model loaded: %s on cuda/%s", model_size, compute)
+                logger.info("Model loaded: %s on cpu/%s", model_size, compute)
                 return _whisper_model
-            except Exception as e:
-                logger.warning("%s on cuda/%s failed: %s", model_size, compute, e)
-
-    # CPU fallback: user-configured or small model
-    device = "cpu"
-    model_size = settings.whisper_model or "small"
-    for compute in ("int8", "int8_float16"):
-        try:
-            _whisper_model = WhisperModel(model_size, device="cpu",
-                compute_type=compute, num_workers=2)
-            _device = "cpu"
-            _compute_type = compute
-            _model_size = model_size
-            logger.info("Model loaded: %s on cpu/%s", model_size, compute)
-            return _whisper_model
-        except Exception:
-            continue
-    raise RuntimeError("无法加载 Whisper 模型（CPU/GPU 均不可用）")
+            except Exception:
+                continue
+        raise RuntimeError("无法加载 Whisper 模型（CPU/GPU 均不可用）")
 
 
 def download_audio(url: str, progress_cb=None) -> Path:

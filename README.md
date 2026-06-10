@@ -83,16 +83,22 @@ OBSIDIAN_VAULT=D:\tool\ob\know\0604
 
 外文视频自动翻译为中文对照（英文上+灰色中文下）。
 
+### 播放列表批量解析
+
+粘贴播放列表链接 → 自动提取所有视频 URL → 逐个串行分析。批量视频自动归入 `作者_解析日期` 子文件夹，侧栏显示为可折叠子目录组。
+
 ### RAG 对话问答
 
-分析完成后可在页面底部对视频内容提问，基于 ChromaDB 向量检索定位相关片段，LLM 回答带时间戳引用。
+- **单视频问答**：分析完成后在页面底部对视频内容提问，ChromaDB 检索 top-5 相关片段，LLM 回答带时间戳引用
+- **多轮对话**：支持追问上下文，`"那这个呢？"` 能理解指代
+- **全局搜索**：跨所有已分析视频搜索"谁讲过 XX"，结果标注来源视频
 
 ### Obsidian 集成
 
 - 设置 `OUTPUT_DIR` → 分析结果直写 Obsidian Vault
 - YAML frontmatter (title/platform/date/concepts) → Dataview 可查询
 - LLM 自动提取 3-5 个核心概念 → `[[wikilink]]` → Graph View 双向链接
-- 历史记录侧栏按仓库路径分组折叠，颜色区分来源
+- 侧栏历史按仓库路径两级分组（vault → 子目录 → 条目），四色区分来源目录
 
 ---
 
@@ -178,22 +184,24 @@ scan/
 │   ├── analyzers/              # LLM 分析
 │   │   └── summarizer.py       # 摘要 + 重点提取 + 概念提取
 │   ├── rag/                    # 检索增强生成
-│   │   ├── vectorstore.py      # ChromaDB 向量存储
-│   │   └── chat.py             # RAG 问答逻辑
+│   │   ├── vectorstore.py      # ChromaDB 向量存储 (bge-m3)
+│   │   └── chat.py             # RAG 问答逻辑 (单视频 + 全局搜索)
 │   ├── output/                 # 输出生成
 │   │   ├── srt.py              # SRT 字幕格式化
 │   │   └── markdown.py         # .md 生成 (含 YAML frontmatter)
 │   └── web/                    # Web 服务
-│       ├── server.py           # FastAPI (9个路由 + SSE 5事件类型)
+│       ├── server.py           # FastAPI 路由
+│       ├── pipeline.py         # 分析管道 + SSE 事件 + 取消任务
+│       ├── history.py          # 历史 CRUD (APIRouter)
 │       └── static/
-│           └── index.html      # 单页前端 (侧栏分组+主题+进度+双语渲染)
+│           └── index.html      # 单页前端 (嵌套侧栏 + 四色 + 取消 + 双语搜索)
 ├── output/                     # 旧解析结果 (未配置 OUTPUT_DIR 时使用)
 ├── tempvideo/                  # 临时音频 (自动清理)
 ├── .cache/                     # diskcache 缓存
-├── .chromadb/                  # ChromaDB 向量索引
+├── .chromadb/                  # ChromaDB 向量索引 (bge-m3 1024维)
 └── 迭代文档/                   # 文档
     ├── 流程图.md               # Mermaid 流程图
-    ├── 问题记录.md             # 23→25 条问题追踪
+    ├── 问题记录.md             # 问题追踪 (31条)
     ├── 经验总结.md             # 架构/工程经验
     ├── 优化升级方向.md         # 已完成 + 待做清单
     └── 未来发展.md             # 实体软件定位、演进路径、Electron方案
@@ -205,12 +213,16 @@ scan/
 |------|------|------|
 | GET | `/` | Web 页面 |
 | POST | `/api/analyze?url=` | 分析视频 |
-| GET | `/api/progress/{task_id}` | SSE 进度流 |
+| POST | `/api/analyze/playlist?url=` | 批量解析播放列表 (自动归入 `作者_日期` 子文件夹) |
+| GET | `/api/progress/{task_id}` | SSE 进度流 (5 事件类型) |
+| GET | `/api/progress/batch/{batch_id}` | 批量解析进度 (SSE + 队列) |
+| POST | `/api/cancel/{task_id}` | 取消进行中的任务 |
 | GET | `/api/download/{filepath}` | 下载 .md 文件 |
-| GET | `/api/history` | 历史记录列表 (双目录合并) |
+| GET | `/api/history` | 历史记录列表 (双目录合并、子目录嵌套) |
 | GET | `/api/history/{name}` | 历史详情 |
-| DELETE | `/api/history/{name}` | 删除历史记录 |
-| GET | `/api/chat?task_id=&q=` | RAG 问答 |
+| DELETE | `/api/history/{name}` | 删除历史记录 (含 ChromaDB 集) |
+| POST | `/api/chat` | RAG 问答 (单视频 + 多轮对话) |
+| GET | `/api/chat/global?q=` | 跨视频全局搜索
 
 ## 注意事项
 
