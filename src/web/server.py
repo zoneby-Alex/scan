@@ -149,14 +149,77 @@ def download(filepath: str):
 
 @app.get("/api/export/{base_name:path}")
 def export(base_name: str, format: str = "html"):
+    from fastapi.responses import Response
     if format == "html":
         html = generate_html_from_history(base_name)
         if html is None:
             raise HTTPException(404, "记录不存在")
-        from fastapi.responses import Response
         return Response(content=html, media_type="text/html",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_safe_filename(base_name)}.html"})
+    if format == "pdf":
+        from src.output.pdf import generate_pdf_from_history
+        try:
+            pdf_bytes = generate_pdf_from_history(base_name, backend=settings.pdf_backend)
+        except RuntimeError as e:
+            raise HTTPException(500, f"PDF 生成失败: {e}")
+        if pdf_bytes is None:
+            raise HTTPException(404, "记录不存在")
+        return Response(content=pdf_bytes, media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_safe_filename(base_name)}.pdf"})
     raise HTTPException(400, f"不支持的导出格式: {format}")
+
+
+class BatchExportRequest(BaseModel):
+    base_names: list[str]
+    format: str = "pdf"
+
+
+@app.post("/api/export/batch")
+def export_batch(req: BatchExportRequest):
+    from fastapi.responses import Response
+    from io import BytesIO
+    import zipfile
+    if not req.base_names:
+        raise HTTPException(400, "未选择记录")
+    if len(req.base_names) > 50:
+        raise HTTPException(400, "单次最多 50 条")
+    if req.format != "pdf":
+        raise HTTPException(400, f"暂只支持 pdf 格式，收到: {req.format}")
+
+    from src.output.pdf import generate_pdf_from_history
+
+    used: set[str] = set()
+    failed: list[dict] = []
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for bn in req.base_names:
+            try:
+                pdf_bytes = generate_pdf_from_history(bn, backend=settings.pdf_backend)
+                if pdf_bytes is None:
+                    failed.append({"base_name": bn, "error": "记录不存在"})
+                    continue
+                # Unique filename: last segment of base_name + .pdf, with _1/_2 suffix on collision
+                stem = bn.replace("\\", "/").rsplit("/", 1)[-1]
+                stem = re.sub(r"[\\/:*?\"<>|]", "_", stem)[:80] or "video"
+                name = f"{stem}.pdf"
+                i = 1
+                while name in used:
+                    name = f"{stem}_{i}.pdf"
+                    i += 1
+                used.add(name)
+                zf.writestr(name, pdf_bytes)
+            except Exception as e:
+                failed.append({"base_name": bn, "error": str(e)})
+        if failed:
+            zf.writestr("_failed.json", json.dumps(failed, ensure_ascii=False, indent=2))
+
+    buf.seek(0)
+    fname = f"videos_{len(req.base_names)}.zip"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=\"{fname}\""},
+    )
 
 
 def _safe_filename(name: str) -> str:

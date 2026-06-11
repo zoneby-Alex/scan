@@ -16,7 +16,7 @@ _CSS = """
 :root{--bg:#0f0f0f;--card:#1a1a1a;--border:#2a2a2a;--text:#e0e0e0;--muted:#888;--accent:#00b894;--danger:#e74c3c}
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);padding:24px;line-height:1.6}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei','PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Source Han Sans SC',sans-serif;background:var(--bg);color:var(--text);padding:24px;line-height:1.6}
 h1{font-size:1.4rem;color:var(--accent);margin-bottom:4px}
 .hero{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;display:flex;gap:16px;align-items:flex-start}
 .hero img{width:160px;height:90px;object-fit:cover;border-radius:4px;background:var(--border);flex-shrink:0}
@@ -31,6 +31,23 @@ td{padding:8px;border-bottom:1px solid var(--bg);vertical-align:top}
 .sub-line{padding:3px 0;font-size:0.9rem;color:var(--muted);border-bottom:1px solid var(--bg)}
 .overview-text{white-space:pre-wrap;line-height:1.7;font-size:0.9rem}
 .footer{text-align:center;padding:16px 0;color:var(--muted);font-size:0.8rem}
+
+/* PDF / print rules */
+@page{size:A4;margin:1.8cm 1.5cm;@bottom-center{content:counter(page) " / " counter(pages);font-size:9pt;color:#888}}
+@media print{
+  body{background:#fff !important;color:#000 !important;padding:0}
+  .hero,.section{background:#fff !important;border:1px solid #ccc !important;page-break-inside:avoid;box-shadow:none}
+  .hero{page-break-after:avoid}
+  table{page-break-inside:auto}
+  tr{page-break-inside:avoid;page-break-after:auto}
+  thead{display:table-header-group}
+  h1,h2,h3{page-break-after:avoid;color:#000 !important}
+  .section h2{border-bottom-color:#888 !important}
+  th{color:#000 !important;border-bottom-color:#888 !important}
+  .time{color:#000 !important}
+  .sub-line{page-break-inside:avoid;color:#222 !important;border-bottom:none}
+  .footer{display:none}
+}
 """
 
 

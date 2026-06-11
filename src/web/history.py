@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from src.cache import cache
 from src.output.markdown import _OUTPUT_DIR
@@ -230,8 +231,10 @@ def history():
     return items
 
 
-@router.delete("/api/history/{base_name:path}")
-def delete_history(base_name: str):
+def _delete_one(base_name: str) -> None:
+    """Delete a single history record (folder + cache + chromadb collection).
+    Raises FileNotFoundError if the record doesn't exist.
+    """
     import shutil
     for root in scan_dirs():
         resolved_root = root.resolve()
@@ -246,8 +249,40 @@ def delete_history(base_name: str):
             except Exception:
                 pass
             shutil.rmtree(folder)
-            return {"ok": True}
-    raise HTTPException(404, "记录不存在")
+            return
+    raise FileNotFoundError(base_name)
+
+
+@router.delete("/api/history/{base_name:path}")
+def delete_history(base_name: str):
+    try:
+        _delete_one(base_name)
+    except FileNotFoundError:
+        raise HTTPException(404, "记录不存在")
+    return {"ok": True}
+
+
+class BatchDeleteRequest(BaseModel):
+    base_names: list[str]
+
+
+@router.post("/api/history/batch_delete")
+def batch_delete(req: BatchDeleteRequest):
+    if not req.base_names:
+        raise HTTPException(400, "未选择记录")
+    if len(req.base_names) > 200:
+        raise HTTPException(400, "单次最多 200 条")
+    deleted: list[str] = []
+    failed: list[dict] = []
+    for bn in req.base_names:
+        try:
+            _delete_one(bn)
+            deleted.append(bn)
+        except FileNotFoundError:
+            failed.append({"base_name": bn, "error": "记录不存在"})
+        except Exception as e:
+            failed.append({"base_name": bn, "error": str(e)})
+    return {"deleted": deleted, "failed": failed}
 
 
 @router.get("/api/history/{base_name:path}")

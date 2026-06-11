@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     output_dir: str = ""
     obsidian_vault: str = ""
     whisper_model: str = ""
+    pdf_backend: str = "auto"  # "auto" | "weasyprint" | "chrome"
 
     @property
     def anthropic_kwargs(self) -> dict:

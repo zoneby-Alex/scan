@@ -125,6 +125,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .streaming { animation: pulse 1s infinite; }
 .empty-history { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 20px 0; }
 
+/* ── Bulk actions ──────────────────── */
+.bulk-btn { width: 100%; padding: 7px; background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 0.78rem; margin-bottom: 4px; font-family: inherit; }
+.bulk-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.bulk-btn:hover:not(:disabled) { background: var(--bg); }
+.bulk-del { color: var(--danger); border-color: var(--danger); }
+.bulk-pdf { color: var(--accent); border-color: var(--accent); }
+#bulkProgress { padding: 6px 4px 0; font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 6px; line-height: 1.4; }
+.bulk-spinner { width: 11px; height: 11px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: bulk-spin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes bulk-spin { to { transform: rotate(360deg); } }
+.hi-group-cb { margin-right: 2px; cursor: pointer; flex-shrink: 0; }
+
 /* ── Markdown rendered content ─────── */
 .md-rendered { line-height: 1.7; font-size: 0.9rem; }
 .md-rendered h1, .md-rendered h2, .md-rendered h3 { margin: 16px 0 8px; color: var(--accent); }
@@ -164,10 +175,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <!-- ════════ Sidebar ════════ -->
 <div id="sidebar">
-  <h2>📋 历史记录 <span style="display:flex;gap:4px"><button onclick="loadHistory()" title="刷新">↻</button><button id="delBtn" onclick="deleteSelected()" title="删除选中" style="display:none;color:var(--danger);border-color:var(--danger)">🗑</button></span></h2>
+  <h2 style="display:flex;align-items:center;gap:6px">
+    <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)" title="全选/反选" style="cursor:pointer;flex-shrink:0">
+    <span>📋 历史记录</span>
+    <span id="selectedCount" style="font-size:0.7rem;color:var(--muted);font-weight:normal"></span>
+    <span style="margin-left:auto;display:flex;gap:4px">
+      <button onclick="loadHistory()" title="刷新">↻</button>
+      <button id="delBtn" onclick="deleteSelected()" title="删除选中" style="display:none;color:var(--danger);border-color:var(--danger)">🗑</button>
+    </span>
+  </h2>
   <div id="historyList"><div class="empty-history">暂无记录</div></div>
   <div id="historyActions" style="display:none;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
-    <button onclick="deleteSelected()" style="width:100%;padding:6px;background:none;border:1px solid var(--danger);border-radius:4px;color:var(--danger);cursor:pointer;font-size:0.78rem">删除选中记录</button>
+    <button class="bulk-btn bulk-pdf" onclick="downloadSelectedPdf()">📕 打包下载 PDF</button>
+    <button class="bulk-btn bulk-del" onclick="deleteSelected()">🗑 删除选中</button>
+    <div id="bulkProgress" style="display:none"></div>
   </div>
 </div>
 <button id="sidebarToggle" onclick="toggleSidebar()" title="收起/展开侧栏">◀</button>
@@ -292,24 +313,29 @@ async function loadHistory() {
     });
 
     let html = '';
+    let _gid = 0;
     for (const [path, pg] of Object.entries(pathGroups)) {
       const color = pathColor(path);
       const label = pathShort(path);
       const total = pg.items.length + Object.values(pg.subs).reduce((a, v) => a + v.length, 0);
-      html += `<div class="hi-group" style="border-left-color:${color}">
-        <div class="hi-group-header" style="color:${color};background:${color}18" onclick="this.parentElement.classList.toggle('collapsed')">
-          <span class="hi-group-arrow">▼</span>
-          <span class="hi-group-name" title="${esc(path)}">${esc(label)}</span>
+      const gidTop = `g${_gid++}`;
+      html += `<div class="hi-group" data-gid="${gidTop}" style="border-left-color:${color}">
+        <div class="hi-group-header" style="color:${color};background:${color}18">
+          <input type="checkbox" class="hi-group-cb" onclick="event.stopPropagation();toggleGroup(this,'${gidTop}')" title="选中本组">
+          <span class="hi-group-arrow" onclick="this.parentElement.parentElement.classList.toggle('collapsed')">▼</span>
+          <span class="hi-group-name" title="${esc(path)}" onclick="this.parentElement.parentElement.classList.toggle('collapsed')">${esc(label)}</span>
           <span class="hi-group-count">${total}</span>
         </div>
         <div class="hi-group-body">`;
 
       // Sub-directory groups
       for (const [sub, idxs] of Object.entries(pg.subs)) {
-        html += `<div class="hi-group" style="margin:4px 0 4px 6px;border-left-color:${color}">
-          <div class="hi-group-header" style="color:${color};background:${color}10;font-size:0.7rem;padding:3px 6px" onclick="this.parentElement.classList.toggle('collapsed')">
-            <span class="hi-group-arrow">▼</span>
-            <span class="hi-group-name" title="${esc(sub)}">📁 ${esc(sub)}</span>
+        const gidSub = `g${_gid++}`;
+        html += `<div class="hi-group" data-gid="${gidSub}" style="margin:4px 0 4px 6px;border-left-color:${color}">
+          <div class="hi-group-header" style="color:${color};background:${color}10;font-size:0.7rem;padding:3px 6px">
+            <input type="checkbox" class="hi-group-cb" onclick="event.stopPropagation();toggleGroup(this,'${gidSub}')" title="选中本子组">
+            <span class="hi-group-arrow" onclick="this.parentElement.parentElement.classList.toggle('collapsed')">▼</span>
+            <span class="hi-group-name" title="${esc(sub)}" onclick="this.parentElement.parentElement.classList.toggle('collapsed')">📁 ${esc(sub)}</span>
             <span class="hi-group-count">${idxs.length}</span>
           </div>
           <div class="hi-group-body">`;
@@ -318,7 +344,7 @@ async function loadHistory() {
           const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:${color};border:1px solid ${color}88;border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
           html += `<div class="history-item" data-idx="${i}">
           <div style="display:flex;align-items:flex-start;gap:6px">
-            <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
+            <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateBulkBtns()" style="margin-top:2px;flex-shrink:0" title="选择">
             <div style="flex:1;min-width:0" onclick="showHistory(${i})">
               <div class="hi-title">${esc(h.title)}</div>
               <div class="hi-time">${fmtDate(h.time)}</div>
@@ -335,7 +361,7 @@ async function loadHistory() {
         const tagHtml = h.tags && h.tags.length ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${h.tags.slice(0,3).map(t => `<span style="font-size:0.65rem;color:${color};border:1px solid ${color}88;border-radius:3px;padding:0 4px">${esc(t)}</span>`).join('')}</div>` : '';
         html += `<div class="history-item" data-idx="${i}">
           <div style="display:flex;align-items:flex-start;gap:6px">
-            <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateDelBtn()" style="margin-top:2px;flex-shrink:0" title="选择">
+            <input type="checkbox" class="hi-cb" data-idx="${i}" onclick="event.stopPropagation(); updateBulkBtns()" style="margin-top:2px;flex-shrink:0" title="选择">
             <div style="flex:1;min-width:0" onclick="showHistory(${i})">
               <div class="hi-path" style="color:${color};border:1px solid ${color}99" title="${esc(path)}">${esc(label)}</div>
               <div class="hi-title">${esc(h.title)}</div>
@@ -347,27 +373,129 @@ async function loadHistory() {
       html += '</div></div>';
     }
     list.innerHTML = html;
-    updateDelBtn();
+    updateBulkBtns();
   } catch(e) {
     console.error('History load failed:', e);
   }
 }
 
-function updateDelBtn() {
-  const checked = document.querySelectorAll('.hi-cb:checked').length;
-  document.getElementById('delBtn').style.display = checked > 0 ? 'inline' : 'none';
-  document.getElementById('historyActions').style.display = checked > 0 ? 'block' : 'none';
+function updateBulkBtns() {
+  const cbs = document.querySelectorAll('.hi-cb');
+  const checked = document.querySelectorAll('.hi-cb:checked');
+  const n = checked.length;
+  const total = cbs.length;
+
+  document.getElementById('selectedCount').textContent = n > 0 ? `(${n}/${total})` : '';
+  document.getElementById('historyActions').style.display = n > 0 ? 'block' : 'none';
+  document.getElementById('delBtn').style.display = n > 0 ? 'inline' : 'none';
+
+  // Top select-all tristate
+  const sa = document.getElementById('selectAll');
+  sa.checked = n > 0 && n === total;
+  sa.indeterminate = n > 0 && n < total;
+
+  // Per-group tristate
+  document.querySelectorAll('.hi-group[data-gid]').forEach(g => {
+    const groupCbs = g.querySelectorAll('.hi-cb');
+    const groupChecked = g.querySelectorAll('.hi-cb:checked');
+    const gc = g.querySelector(':scope > .hi-group-header > .hi-group-cb');
+    if (!gc || groupCbs.length === 0) return;
+    gc.checked = groupChecked.length > 0 && groupChecked.length === groupCbs.length;
+    gc.indeterminate = groupChecked.length > 0 && groupChecked.length < groupCbs.length;
+  });
+
+  // PDF bulk button: disable when >50
+  const pdfBtn = document.querySelector('.bulk-pdf');
+  if (pdfBtn) {
+    pdfBtn.disabled = n === 0 || n > 50;
+    pdfBtn.title = n > 50 ? '单次最多 50 条，请减少选择'
+                   : n === 0 ? '请先勾选记录'
+                   : `打包 ${n} 个视频为 ZIP`;
+  }
+}
+// Back-compat shim (older inline handlers still call updateDelBtn)
+function updateDelBtn() { updateBulkBtns(); }
+
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.hi-cb').forEach(cb => cb.checked = checked);
+  updateBulkBtns();
+}
+
+function toggleGroup(checkbox, gid) {
+  const g = document.querySelector(`.hi-group[data-gid="${gid}"]`);
+  if (!g) return;
+  g.querySelectorAll('.hi-cb').forEach(cb => cb.checked = checkbox.checked);
+  updateBulkBtns();
 }
 
 async function deleteSelected() {
   const cbs = document.querySelectorAll('.hi-cb:checked');
   if (!cbs.length) return;
   if (!confirm(`确定删除 ${cbs.length} 条历史记录？此操作不可撤销。`)) return;
-  const toDelete = [...cbs].map(cb => currentHistory[parseInt(cb.dataset.idx)].base_name);
-  for (const bn of toDelete) {
-    try { await fetch(`/api/history/${encodeURIComponent(bn)}`, { method: 'DELETE' }); } catch(e) {}
+  const base_names = [...cbs].map(cb => currentHistory[parseInt(cb.dataset.idx)].base_name);
+  const prog = document.getElementById('bulkProgress');
+  prog.style.display = 'flex';
+  prog.innerHTML = `<div class="bulk-spinner"></div><span>正在删除 ${base_names.length} 条...</span>`;
+  try {
+    const r = await fetch('/api/history/batch_delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ base_names }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    const okN = (d.deleted || []).length;
+    const failN = (d.failed || []).length;
+    prog.innerHTML = failN === 0
+      ? `<span style="color:var(--success)">✓ 已删除 ${okN} 条</span>`
+      : `<span style="color:var(--danger)">已删 ${okN}，失败 ${failN}: ${d.failed.slice(0,3).map(f=>esc(f.base_name)).join(', ')}${failN>3?'...':''}</span>`;
+    setTimeout(() => { prog.style.display = 'none'; prog.innerHTML = ''; }, 5000);
+  } catch (e) {
+    prog.innerHTML = `<span style="color:var(--danger)">✗ 失败: ${esc(e.message)}</span>`;
   }
   loadHistory();
+}
+
+async function downloadSelectedPdf() {
+  const cbs = document.querySelectorAll('.hi-cb:checked');
+  if (!cbs.length) return;
+  if (cbs.length > 50) { alert('单次最多 50 条'); return; }
+  const base_names = [...cbs].map(cb => currentHistory[parseInt(cb.dataset.idx)].base_name);
+
+  const prog = document.getElementById('bulkProgress');
+  prog.style.display = 'flex';
+  prog.innerHTML = `<div class="bulk-spinner"></div><span>正在生成 ${base_names.length} 个 PDF（每条约 5–15 秒）...</span>`;
+  const pdfBtn = document.querySelector('.bulk-pdf');
+  const delBtn = document.querySelector('.bulk-del');
+  pdfBtn.disabled = true;
+  delBtn.disabled = true;
+
+  try {
+    const r = await fetch('/api/export/batch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ base_names, format: 'pdf' }),
+    });
+    if (!r.ok) {
+      let msg = `HTTP ${r.status}`;
+      try { msg = (await r.json()).detail || msg; } catch(_) {}
+      throw new Error(msg);
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `videos_${base_names.length}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    prog.innerHTML = `<span style="color:var(--success)">✓ 下载完成（${(blob.size/1024/1024).toFixed(1)} MB），如含 _failed.json 表示有失败条目</span>`;
+    setTimeout(() => { prog.style.display = 'none'; prog.innerHTML = ''; }, 8000);
+  } catch (e) {
+    prog.innerHTML = `<span style="color:var(--danger)">✗ 失败: ${esc(e.message)}</span>`;
+  } finally {
+    delBtn.disabled = false;
+    updateBulkBtns();  // re-enable PDF btn based on selection count
+  }
 }
 
 function showHistory(idx) {
@@ -643,9 +771,10 @@ function renderDownloads(files, baseName) {
     return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k}${ext}</a>`;
   }).join('');
   const exports = baseName
-    ? `<button class="export-btn" onclick="window.print()" title="浏览器打印对话框，可保存为 PDF">📄 打印 / PDF</button>
+    ? `<button class="export-btn" onclick="window.print()" title="浏览器打印对话框，可自选边距/页眉页脚">📄 打印 PDF</button>
+       <a class="export-btn" href="/api/export/${encodeURIComponent(baseName)}?format=pdf" title="后端直接生成 PDF（无对话框）">📕 下载 PDF</a>
        <a class="export-btn" href="/api/export/${encodeURIComponent(baseName)}?format=html">📦 导出 HTML</a>`
-    : `<button class="export-btn" onclick="window.print()">📄 打印 / PDF</button>`;
+    : `<button class="export-btn" onclick="window.print()">📄 打印 PDF</button>`;
   el.innerHTML = downloads + exports;
 }
 function switchTab(name) {
