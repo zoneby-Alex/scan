@@ -169,6 +169,20 @@ def export(base_name: str, format: str = "html"):
     raise HTTPException(400, f"不支持的导出格式: {format}")
 
 
+@app.get("/api/mindmap/{base_name:path}")
+def get_mindmap(base_name: str):
+    from src.analyzers.mindmap import generate_mindmap
+    from src.web.history import _load_detail
+    detail = _load_detail(base_name)
+    if detail is None:
+        raise HTTPException(404, "记录不存在")
+    if detail.get("mindmap"):
+        return {"mermaid": detail["mindmap"], "title": detail["title"]}
+    kp_dicts = [{"timestamp": kp["timestamp"], "content": kp["content"]} for kp in detail["keypoints"]]
+    mermaid = generate_mindmap(detail["title"], detail["overview"], kp_dicts)
+    return {"mermaid": mermaid, "title": detail["title"]}
+
+
 class BatchExportRequest(BaseModel):
     base_names: list[str]
     format: str = "pdf"
@@ -227,6 +241,25 @@ def _safe_filename(name: str) -> str:
     from urllib.parse import quote
     cleaned = re.sub(r"[\\/:*?\"<>| ]", "_", name.replace("\\", "/").rsplit("/", 1)[-1])[:60]
     return quote(cleaned)
+
+
+class CompareRequest(BaseModel):
+    base_names: list[str]
+
+
+@app.post("/api/compare")
+def compare_videos_endpoint(req: CompareRequest):
+    from src.analyzers.comparator import compare_videos
+    if len(req.base_names) < 2:
+        raise HTTPException(400, "至少需要 2 个视频")
+    if len(req.base_names) > 5:
+        raise HTTPException(400, "单次最多对比 5 个视频")
+    try:
+        return {"comparison": compare_videos(req.base_names)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"对比分析失败: {e}")
 
 
 class ChatRequest(BaseModel):

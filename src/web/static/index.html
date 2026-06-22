@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Video Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
 :root {
   --bg: #0f0f0f;
@@ -105,6 +106,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tab-content table th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; }
 .tab-content table td { padding: 8px; border-bottom: 1px solid var(--bg); vertical-align: top; }
 .tab-content .stars { color: #f1c40f; white-space: nowrap; }
+.mindmap-box { min-height: 280px; overflow: auto; background: var(--bg); border-radius: 6px; padding: 12px; }
+.mindmap-box svg { max-width: 100%; height: auto; }
+.compare-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; }
+.compare-modal.show { display: flex; }
+.compare-box { width: min(980px, 96vw); max-height: 88vh; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.compare-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.compare-head button { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 4px; padding: 4px 8px; cursor: pointer; }
 .downloads { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 .downloads a, .downloads button { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 0.85rem; background: none; cursor: pointer; font-family: inherit; }
 .downloads a:hover, .downloads button:hover { border-color: var(--accent); color: var(--accent); }
@@ -131,6 +139,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .bulk-btn:hover:not(:disabled) { background: var(--bg); }
 .bulk-del { color: var(--danger); border-color: var(--danger); }
 .bulk-pdf { color: var(--accent); border-color: var(--accent); }
+.bulk-compare { color: #9b59b6; border-color: #9b59b6; }
 #bulkProgress { padding: 6px 4px 0; font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 6px; line-height: 1.4; }
 .bulk-spinner { width: 11px; height: 11px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: bulk-spin 0.8s linear infinite; flex-shrink: 0; }
 @keyframes bulk-spin { to { transform: rotate(360deg); } }
@@ -186,6 +195,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </h2>
   <div id="historyList"><div class="empty-history">暂无记录</div></div>
   <div id="historyActions" style="display:none;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+    <button class="bulk-btn bulk-compare" onclick="compareSelected()">🔍 对比选中</button>
     <button class="bulk-btn bulk-pdf" onclick="downloadSelectedPdf()">📕 打包下载 PDF</button>
     <button class="bulk-btn bulk-del" onclick="deleteSelected()">🗑 删除选中</button>
     <div id="bulkProgress" style="display:none"></div>
@@ -227,10 +237,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="tab-btn active" onclick="switchTab('keypoints')">重点标示</button>
       <button class="tab-btn" onclick="switchTab('subtitles')">完整字幕</button>
       <button class="tab-btn" onclick="switchTab('overview')">内容概览</button>
+      <button class="tab-btn" onclick="switchTab('mindmap')">思维导图</button>
     </div>
     <div id="tab-keypoints" class="tab-content active" data-print-title="重点标示"></div>
     <div id="tab-subtitles" class="tab-content" data-print-title="完整字幕"></div>
     <div id="tab-overview" class="tab-content" data-print-title="内容概览"></div>
+    <div id="tab-mindmap" class="tab-content" data-print-title="思维导图"></div>
     <div class="downloads" id="downloads"></div>
     <div class="chat-section">
       <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -246,6 +258,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <button onclick="ask()">发送</button>
       </div>
     </div>
+  </div>
+</div>
+<div id="compareModal" class="compare-modal" onclick="if(event.target===this)hideCompareModal()">
+  <div class="compare-box">
+    <div class="compare-head">
+      <h3>多视频对比</h3>
+      <button onclick="hideCompareModal()">关闭</button>
+    </div>
+    <div id="compareContent" class="md-rendered"></div>
   </div>
 </div>
 
@@ -270,6 +291,7 @@ let currentTaskId = null;
 let currentKeypoints = [];
 let currentSubtitles = [];
 let currentOverview = '';
+let currentMindmap = '';
 let currentVideoUrl = '';
 let currentPlatform = '';
 let currentHistory = [];
@@ -404,7 +426,14 @@ function updateBulkBtns() {
     gc.indeterminate = groupChecked.length > 0 && groupChecked.length < groupCbs.length;
   });
 
-  // PDF bulk button: disable when >50
+  const compareBtn = document.querySelector('.bulk-compare');
+  if (compareBtn) {
+    compareBtn.disabled = n < 2 || n > 5;
+    compareBtn.title = n < 2 ? '至少选择 2 条记录'
+                       : n > 5 ? '单次最多对比 5 条记录'
+                       : `对比 ${n} 个视频`;
+  }
+
   const pdfBtn = document.querySelector('.bulk-pdf');
   if (pdfBtn) {
     pdfBtn.disabled = n === 0 || n > 50;
@@ -454,6 +483,35 @@ async function deleteSelected() {
     prog.innerHTML = `<span style="color:var(--danger)">✗ 失败: ${esc(e.message)}</span>`;
   }
   loadHistory();
+}
+
+function showCompareModal(html) {
+  document.getElementById('compareContent').innerHTML = html;
+  document.getElementById('compareModal').classList.add('show');
+}
+
+function hideCompareModal() {
+  document.getElementById('compareModal').classList.remove('show');
+}
+
+async function compareSelected() {
+  const cbs = document.querySelectorAll('.hi-cb:checked');
+  if (cbs.length < 2) { alert('至少选择 2 个视频'); return; }
+  if (cbs.length > 5) { alert('单次最多对比 5 个视频'); return; }
+  const base_names = [...cbs].map(cb => currentHistory[parseInt(cb.dataset.idx)].base_name);
+  showCompareModal('<div style="display:flex;gap:8px;align-items:center"><div class="bulk-spinner"></div><span>正在生成对比分析...</span></div>');
+  try {
+    const r = await fetch('/api/compare', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ base_names }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    showCompareModal(mdToHtml(d.comparison || ''));
+  } catch (e) {
+    showCompareModal(`<span style="color:var(--danger)">对比失败: ${esc(e.message)}</span>`);
+  }
 }
 
 async function downloadSelectedPdf() {
@@ -544,6 +602,8 @@ function showHistory(idx) {
       } else {
         document.getElementById('tab-overview').innerHTML = '<p style="color:var(--muted)">暂无概览</p>';
       }
+      currentMindmap = d.mindmap || '';
+      renderMindmap(currentMindmap);
 
       // Downloads
       renderDownloads(h.files, h.base_name);
@@ -611,6 +671,7 @@ async function analyze() {
       currentKeypoints = d.keypoints;
       currentSubtitles = d.subtitles || [];
       currentOverview = d.overview || d.summary || '';
+      currentMindmap = d.mindmap || '';
       currentVideoUrl = d.url || '';
       currentPlatform = d.platform || '';
       chatHistory = [];
@@ -618,6 +679,7 @@ async function analyze() {
       renderKeypoints(d.keypoints, isTranslated);
       renderSubtitles(currentSubtitles, isTranslated);
       renderOverview(currentOverview);
+      renderMindmap(currentMindmap);
       renderDownloads(d.files, d.base_name);
       document.getElementById('statusLine').textContent = '分析完成';
       document.getElementById('statusLine').style.color = 'var(--success)';
@@ -763,9 +825,26 @@ function renderOverview(text) {
   if (!text) { el.innerHTML = '<p style="color:var(--muted)">暂未加载</p>'; return; }
   el.innerHTML = `<div class="md-rendered">${mdToHtml(text)}</div>`;
 }
+function renderMindmap(mermaidText) {
+  const el = document.getElementById('tab-mindmap');
+  if (!mermaidText) {
+    el.innerHTML = '<p style="color:var(--muted)">暂无思维导图</p>';
+    return;
+  }
+  const id = 'mindmap_' + Date.now();
+  el.innerHTML = `<div class="mindmap-box"><pre class="mermaid" id="${id}">${esc(mermaidText)}</pre></div>`;
+  if (window.mermaid) {
+    try {
+      mermaid.initialize({ startOnLoad: false, theme: document.body.getAttribute('data-theme') === 'light' ? 'default' : 'dark' });
+      mermaid.run({ nodes: [document.getElementById(id)] });
+    } catch (e) {
+      el.innerHTML = `<pre class="mindmap-box">${esc(mermaidText)}</pre>`;
+    }
+  }
+}
 function renderDownloads(files, baseName) {
   const el = document.getElementById('downloads');
-  const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示', srt: 'SRT 字幕' };
+  const labels = { subtitles: '完整字幕', overview: '内容概览', keypoints: '重点标示', mindmap: '思维导图', srt: 'SRT 字幕' };
   const downloads = Object.entries(files).map(([k, v]) => {
     const ext = k === 'srt' ? '' : ' (.md)';
     return `<a href="/api/download/${encodeURIComponent(v)}" download>${labels[k] || k}${ext}</a>`;
@@ -780,10 +859,12 @@ function renderDownloads(files, baseName) {
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  const btns = document.querySelectorAll('.tab-btn');
-  if (name === 'keypoints') { btns[0].classList.add('active'); document.getElementById('tab-keypoints').classList.add('active'); }
-  else if (name === 'subtitles') { btns[1].classList.add('active'); document.getElementById('tab-subtitles').classList.add('active'); }
-  else { btns[2].classList.add('active'); document.getElementById('tab-overview').classList.add('active'); }
+  const names = ['keypoints', 'subtitles', 'overview', 'mindmap'];
+  const idx = names.indexOf(name);
+  if (idx >= 0) {
+    document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+    document.getElementById(`tab-${name}`).classList.add('active');
+  }
 }
 
 // ── Chat ───────────────────────────

@@ -101,6 +101,7 @@ def _load_detail(base_name: str) -> dict | None:
         "subtitles": [], "overview": "", "keypoints": [],
         "thumbnail": "", "category": "", "tags": [],
         "platform": "", "author": "", "duration": "", "url": "",
+        "mindmap": "",
     }
 
     # Load meta.json
@@ -165,6 +166,14 @@ def _load_detail(base_name: str) -> dict | None:
                 result["subtitles"].append(line + ("\n" + zh if zh else ""))
             i += 1
 
+    mm = folder / "mindmap.md"
+    if mm.exists():
+        text = mm.read_text(encoding="utf-8", errors="replace")
+        if "```mermaid" in text:
+            result["mindmap"] = text.split("```mermaid", 1)[1].split("```", 1)[0].strip()
+        else:
+            result["mindmap"] = text.strip()
+
     result["translated"] = any("\n" in s for s in result["subtitles"])
 
     return result
@@ -223,6 +232,7 @@ def history():
                 "subtitles": str((folder / "subtitles.md").relative_to(root)),
                 "overview": str((folder / "overview.md").relative_to(root)),
                 "keypoints": str((folder / "keypoints.md").relative_to(root)),
+                **({"mindmap": str((folder / "mindmap.md").relative_to(root))} if (folder / "mindmap.md").exists() else {}),
             },
         })
 

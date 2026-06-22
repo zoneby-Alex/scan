@@ -203,6 +203,21 @@ async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
         if parent_dir:
             base_name = f"{parent_dir}/{base_name}"
         files = await asyncio.to_thread(generate_all, result, base_name, concepts=concepts)
+        mermaid = ""
+
+        # Generate mindmap (LLM-dependent, separate from sync generate_all)
+        try:
+            push(task_id, "status", "生成思维导图...")
+            from src.analyzers.mindmap import generate_mindmap as gen_mm
+            kp_dicts = [{"timestamp": kp.timestamp, "content": kp.content} for kp in keypoints]
+            mermaid = await asyncio.to_thread(gen_mm, meta.title, summary_text, kp_dicts)
+            mm_path = _OUTPUT_DIR / base_name / "mindmap.md"
+            mm_path.write_text(
+                f"# {meta.title} — 思维导图\n\n```mermaid\n{mermaid}\n```\n",
+                encoding="utf-8")
+            files["mindmap"] = str(mm_path.relative_to(_OUTPUT_DIR))
+        except Exception:
+            pass
 
         # Persist metadata for history
         _meta = {
@@ -261,6 +276,7 @@ async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
             "files": {k: str(v) for k, v in files.items()},
             "subtitles": sub_lines,
             "overview": summary_text,
+            "mindmap": mermaid,
             "translated": translated,
             "base_name": base_name,
         }))

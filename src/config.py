@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     whisper_model: str = ""
     pdf_backend: str = "auto"  # "auto" | "weasyprint" | "chrome"
 
+    rag_rerank: bool = True  # enable cross-encoder reranking for RAG
+    rag_recall_multiplier: int = 4  # how many extra candidates to fetch for reranker pool
+
     @property
     def anthropic_kwargs(self) -> dict:
         return {
