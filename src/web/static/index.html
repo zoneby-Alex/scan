@@ -637,8 +637,8 @@ function fmtDate(ts) {
 async function analyze() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) return;
-  // Detect playlist URL
-  if (url.includes('playlist?list=')) {
+  // Detect playlist/collection URL (YouTube or Bilibili)
+  if (url.includes('playlist?list=') || /space\.bilibili\.com\/\d+\/lists\//.test(url)) {
     return analyzePlaylist(url);
   }
   const btn = document.getElementById('analyzeBtn');
