@@ -21,6 +21,8 @@ _YT_PLAYLIST_PATTERN = re.compile(
 
 def extract_playlist_urls(url: str) -> list[str]:
     """Expand a YouTube playlist URL into individual video URLs."""
+    if not _YT_PLAYLIST_PATTERN.search(url):
+        return []
     with yt_dlp.YoutubeDL({"quiet": True, "extract_flat": True}) as ydl:
         info = ydl.extract_info(url, download=False)
         entries = info.get("entries", [])

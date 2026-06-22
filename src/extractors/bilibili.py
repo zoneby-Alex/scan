@@ -24,8 +24,6 @@ _BILI_API_PLAYER = "https://api.bilibili.com/x/player/v2"
 _BILI_API_PLAYER_WBI = "https://api.bilibili.com/x/player/wbi/v2"
 _BILI_API_NAV = "https://api.bilibili.com/x/web-interface/nav"
 _BILI_API_PLAYURL = "https://api.bilibili.com/x/player/playurl"
-_BILI_API_SEASON = "https://api.bilibili.com/x/season/archive/list"
-_BILI_API_SERIES = "https://api.bilibili.com/x/series/archives"
 
 _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -136,58 +134,28 @@ def fetch_bilibili_audio_url(bvid: str, cid: int) -> tuple[str, str] | None:
         return None
 
 
-def expand_collection(url: str) -> list[str]:
-    """Expand a Bilibili collection/list URL into individual video URLs."""
+def expand_collection(url: str) -> tuple[list[str], str]:
+    """Expand a Bilibili collection URL into (video_urls, author_name).
+    Uses yt-dlp's BilibiliCollectionList extractor.
+    """
     m = _BILI_COLLECTION_URL_PATTERN.search(url)
     if not m:
-        return []
-    mid, list_id = m.group(1), m.group(2)
-    is_season = "type=season" in url or "season_id=" in url
+        return [], ""
 
-    all_bvids: list[str] = []
-    for pn in range(1, 20):  # max 20 pages = 2000 videos
-        if is_season:
-            r = _retry_get(_BILI_API_SEASON, params={"season_id": int(list_id), "pn": pn, "ps": 100})
-        else:
-            r = _retry_get(_BILI_API_SERIES, params={"mid": int(mid), "series_id": int(list_id), "pn": pn, "ps": 100})
-        data = r.json()
-        if data.get("code") != 0:
-            break
-        archives = data.get("data", {}).get("archives", [])
-        if not archives:
-            break
-        for a in archives:
-            bvid = a.get("bvid", "")
-            if bvid:
-                all_bvids.append(bvid)
-        total = data.get("data", {}).get("page", {}).get("total", 0)
-        if len(all_bvids) >= total:
-            break
-
-    # Dedup while preserving order
-    seen = set()
-    unique = []
-    for bvid in all_bvids:
-        if bvid not in seen:
-            seen.add(bvid)
-            unique.append(f"https://www.bilibili.com/video/{bvid}")
-    return unique
-
-
-def fetch_collection_author(url: str) -> str:
-    """Get the uploader/creator name for a Bilibili collection URL."""
-    m = _BILI_COLLECTION_URL_PATTERN.search(url)
-    if not m:
-        return ""
-    mid = m.group(1)
+    import yt_dlp as _yt_dlp
+    opts = {"quiet": True, "extract_flat": True}
     try:
-        r = _retry_get("https://api.bilibili.com/x/space/acc/info", params={"mid": int(mid)})
-        data = r.json()
-        if data.get("code") == 0:
-            return data.get("data", {}).get("name", "")
+        with _yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        entries = info.get("entries", [])
+        uploader = info.get("uploader", "") or ""
+        urls = [
+            e.get("url") or f"https://www.bilibili.com/video/{e['id']}"
+            for e in entries if e.get("id")
+        ]
+        return urls, uploader
     except Exception:
-        pass
-    return ""
+        return [], ""
 
 
 class BilibiliExtractor(BaseExtractor):
