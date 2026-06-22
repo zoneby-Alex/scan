@@ -63,23 +63,27 @@ async def analyze(url: str = Query(...), parent_dir: str = Query("")):
 
 @app.post("/api/analyze/playlist")
 async def analyze_playlist(url: str = Query(...)):
-    from src.extractors.youtube import extract_playlist_urls
-    urls = await asyncio.to_thread(extract_playlist_urls, url)
+    from src.extractors import expand_playlist
+    urls, author = await asyncio.to_thread(expand_playlist, url)
     if not urls:
         raise HTTPException(400, "播放列表为空或无法解析")
 
     batch_id = make_task_id()
     batch_tracker[batch_id] = {"total": len(urls), "done": 0, "tasks": []}
 
-    # Get author and date for parent folder naming
-    import yt_dlp as _yt_dlp
-    try:
-        with _yt_dlp.YoutubeDL({"quiet": True, "extract_flat": False}) as ydl:
-            pl_info = await asyncio.to_thread(ydl.extract_info, url, download=False)
-        uploader = pl_info.get("uploader", "") or pl_info.get("channel", "") or ""
-        author = re.sub(r"[\\/:*?\"<>|' ]", "_", uploader)[:30]
-    except Exception:
-        author = ""
+    # Get author for parent folder naming. Bilibili provides it directly;
+    # YouTube needs yt-dlp fallback.
+    if not author:
+        import yt_dlp as _yt_dlp
+        try:
+            with _yt_dlp.YoutubeDL({"quiet": True, "extract_flat": False}) as ydl:
+                pl_info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+            uploader = pl_info.get("uploader", "") or pl_info.get("channel", "") or ""
+            author = re.sub(r"[\\/:*?\"<>|' ]", "_", uploader)[:30]
+        except Exception:
+            author = ""
+    else:
+        author = re.sub(r"[\\/:*?\"<>|' ]", "_", author)[:30]
     parent_dir = f"{author}_{date.today()}" if author else ""
 
     async def _run_serial():
