@@ -69,7 +69,7 @@ async def analyze_playlist(url: str = Query(...)):
         raise HTTPException(400, "播放列表为空或无法解析")
 
     batch_id = make_task_id()
-    batch_tracker[batch_id] = {"total": len(urls), "done": 0, "tasks": []}
+    batch_tracker[batch_id] = {"total": len(urls), "done": 0, "failed": 0, "tasks": []}
 
     # Get author for parent folder naming. Bilibili provides it directly;
     # YouTube needs yt-dlp fallback.
@@ -94,18 +94,25 @@ async def analyze_playlist(url: str = Query(...)):
             push(f"batch_{batch_id}", "batch_progress", json.dumps({
                 "done": batch_tracker[batch_id]["done"],
                 "total": len(urls),
+                "failed": batch_tracker[batch_id]["failed"],
                 "task_id": tid, "video": video_url.rsplit("/", 1)[-1][:40],
             }))
-            await run_pipeline(video_url, tid, parent_dir=parent_dir)
+            try:
+                await run_pipeline(video_url, tid, parent_dir=parent_dir)
+            except Exception:
+                batch_tracker[batch_id]["failed"] += 1
             if batch_id in batch_tracker:
                 batch_tracker[batch_id]["done"] += 1
                 done = batch_tracker[batch_id]["done"]
+                failed = batch_tracker[batch_id]["failed"]
                 push(f"batch_{batch_id}", "batch_progress", json.dumps({
-                    "done": done, "total": len(urls), "task_id": tid,
+                    "done": done, "total": len(urls), "failed": failed, "task_id": tid,
                 }))
         if batch_id in batch_tracker:
             push(f"batch_{batch_id}", "batch_done", json.dumps({
-                "done": batch_tracker[batch_id]["done"], "total": len(urls),
+                "done": batch_tracker[batch_id]["done"],
+                "total": len(urls),
+                "failed": batch_tracker[batch_id]["failed"],
             }))
 
     threading.Thread(target=asyncio.run, args=(_run_serial(),), daemon=True).start()

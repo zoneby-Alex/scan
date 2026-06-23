@@ -170,7 +170,7 @@ def _download_bilibili_audio(url: str, tmpdir: Path, progress_cb=None) -> Path:
 
     import httpx
 
-    from src.extractors.bilibili import BilibiliExtractor, fetch_bilibili_audio_url
+    from src.extractors.bilibili import BilibiliExtractor, _COOKIE_STR, fetch_bilibili_audio_url
 
     ex = BilibiliExtractor()
     bvid = ex._parse_bvid(url)
@@ -194,6 +194,8 @@ def _download_bilibili_audio(url: str, tmpdir: Path, progress_cb=None) -> Path:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
         "Referer": "https://www.bilibili.com",
     }
+    if _COOKIE_STR:
+        dl_headers["Cookie"] = _COOKIE_STR
 
     with httpx.stream("GET", audio_url, headers=dl_headers, timeout=120, follow_redirects=True) as r:
         r.raise_for_status()

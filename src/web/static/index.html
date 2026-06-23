@@ -741,11 +741,20 @@ async function analyzePlaylist(url) {
     const es = new EventSource(`/api/progress/batch/${batch_id}`);
     es.addEventListener('batch_progress', e => {
       const d = JSON.parse(e.data);
-      document.getElementById('statusLine').textContent = `批量分析: ${d.done}/${d.total}`;
+      let text = `批量分析: ${d.done}/${d.total}`;
+      if (d.failed) text += ` (${d.failed} 个失败)`;
+      document.getElementById('statusLine').textContent = text;
     });
     es.addEventListener('batch_done', e => {
-      document.getElementById('statusLine').textContent = '批量分析完成';
-      document.getElementById('statusLine').style.color = 'var(--success)';
+      const d = JSON.parse(e.data);
+      let text = '批量分析完成';
+      if (d.failed) {
+        text += ` (${d.failed} 个失败)`;
+        document.getElementById('statusLine').style.color = 'var(--danger)';
+      } else {
+        document.getElementById('statusLine').style.color = 'var(--success)';
+      }
+      document.getElementById('statusLine').textContent = text;
       btn.disabled = false;
       document.getElementById('cancelBtn').style.display = 'none';
       es.close();
