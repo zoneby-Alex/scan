@@ -77,7 +77,7 @@ def sanitize_task_id(raw: str) -> str:
     return cleaned[:63]
 
 
-async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
+async def run_pipeline(url: str, task_id: str, parent_dir: str = "") -> bool:
     """Full analysis pipeline. Pushes progress events via SSE_EVENTS."""
     cancel_event = threading.Event()
     _running_tasks[task_id] = cancel_event
@@ -85,7 +85,7 @@ async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
     try:
         if cancel_event.is_set():
             push(task_id, "error", "任务已取消")
-            return
+            return False
         push(task_id, "status", "提取字幕中...")
         extractor = get_extractor(url)
         title = author = thumb = ""
@@ -138,11 +138,11 @@ async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
 
         if not subs:
             push(task_id, "error", "该视频没有可用字幕，语音识别也未获取到内容")
-            return
+            return False
 
         if cancel_event.is_set():
             push(task_id, "error", "任务已取消")
-            return
+            return False
 
         push(task_id, "status", f"字幕获取成功 ({len(meta.subtitles)} 条)，预处理中...")
 
@@ -154,7 +154,7 @@ async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
 
         if cancel_event.is_set():
             push(task_id, "error", "任务已取消")
-            return
+            return False
 
         summary_text, chapters = await summarize(
             subs, meta.title,
@@ -280,8 +280,10 @@ async def run_pipeline(url: str, task_id: str, parent_dir: str = ""):
             "translated": translated,
             "base_name": base_name,
         }))
+        return True
     except Exception as e:
         push(task_id, "error", str(e))
+        return False
     finally:
         _running_tasks.pop(task_id, None)
         if audio_path:

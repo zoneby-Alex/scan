@@ -98,8 +98,10 @@ async def analyze_playlist(url: str = Query(...)):
                 "task_id": tid, "video": video_url.rsplit("/", 1)[-1][:40],
             }))
             try:
-                await run_pipeline(video_url, tid, parent_dir=parent_dir)
+                ok = await run_pipeline(video_url, tid, parent_dir=parent_dir)
             except Exception:
+                ok = False
+            if batch_id in batch_tracker and not ok:
                 batch_tracker[batch_id]["failed"] += 1
             if batch_id in batch_tracker:
                 batch_tracker[batch_id]["done"] += 1
