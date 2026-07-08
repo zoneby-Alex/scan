@@ -573,7 +573,7 @@ function showHistory(idx) {
   // Fetch full content
   fetch(`/api/history/${encodeURIComponent(h.base_name)}`)
     .then(r => { if (!r.ok) throw new Error('加载失败'); return r.json(); })
-    .then(d => {
+    .then(async d => {
       document.getElementById('title').textContent = d.title || h.title;
       document.getElementById('meta-line').textContent = [d.platform, d.author, d.duration].filter(Boolean).join(' | ') || fmtDate(h.time);
       if (d.url) document.getElementById('meta-line').innerHTML += ` | <a href="${esc(d.url)}" target="_blank" style="color:var(--accent)">原链</a>`;
@@ -603,7 +603,7 @@ function showHistory(idx) {
         document.getElementById('tab-overview').innerHTML = '<p style="color:var(--muted)">暂无概览</p>';
       }
       currentMindmap = d.mindmap || '';
-      renderMindmap(currentMindmap);
+      await renderMindmap(currentMindmap);
 
       // Downloads
       renderDownloads(h.files, h.base_name);
@@ -662,7 +662,7 @@ async function analyze() {
     es.addEventListener('status', e => { document.getElementById('statusLine').textContent = e.data; });
     es.addEventListener('download', e => { updateBar('downloadBar', e.data); });
     es.addEventListener('transcribe', e => { updateBar('transcribeBar', e.data); });
-    es.addEventListener('done', e => {
+    es.addEventListener('done', async e => {
       const d = JSON.parse(e.data);
       document.getElementById('title').textContent = d.title;
       document.getElementById('meta-line').textContent = `作者: ${d.author} | 时长: ${fmtDuration(d.duration)}`;
@@ -679,7 +679,7 @@ async function analyze() {
       renderKeypoints(d.keypoints, isTranslated);
       renderSubtitles(currentSubtitles, isTranslated);
       renderOverview(currentOverview);
-      renderMindmap(currentMindmap);
+      await renderMindmap(currentMindmap);
       renderDownloads(d.files, d.base_name);
       document.getElementById('statusLine').textContent = '分析完成';
       document.getElementById('statusLine').style.color = 'var(--success)';
@@ -834,21 +834,24 @@ function renderOverview(text) {
   if (!text) { el.innerHTML = '<p style="color:var(--muted)">暂未加载</p>'; return; }
   el.innerHTML = `<div class="md-rendered">${mdToHtml(text)}</div>`;
 }
-function renderMindmap(mermaidText) {
+async function renderMindmap(mermaidText) {
   const el = document.getElementById('tab-mindmap');
   if (!mermaidText) {
     el.innerHTML = '<p style="color:var(--muted)">暂无思维导图</p>';
     return;
   }
-  const id = 'mindmap_' + Date.now();
-  el.innerHTML = `<div class="mindmap-box"><pre class="mermaid" id="${id}">${esc(mermaidText)}</pre></div>`;
+  el.innerHTML = '<p style="color:var(--muted)">加载思维导图...</p>';
   if (window.mermaid) {
     try {
       mermaid.initialize({ startOnLoad: false, theme: document.body.getAttribute('data-theme') === 'light' ? 'default' : 'dark' });
-      mermaid.run({ nodes: [document.getElementById(id)] });
+      const { svg } = await mermaid.render('mindmap_' + Date.now(), mermaidText);
+      el.innerHTML = '<div class="mindmap-box">' + svg + '</div>';
     } catch (e) {
-      el.innerHTML = `<pre class="mindmap-box">${esc(mermaidText)}</pre>`;
+      console.error('Mindmap render failed:', e);
+      el.innerHTML = '<pre class="mindmap-box">' + esc(mermaidText) + '</pre>';
     }
+  } else {
+    el.innerHTML = '<pre class="mindmap-box">' + esc(mermaidText) + '</pre>';
   }
 }
 function renderDownloads(files, baseName) {
