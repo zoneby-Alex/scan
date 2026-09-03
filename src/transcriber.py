@@ -5,7 +5,7 @@ import threading
 import uuid
 from pathlib import Path
 
-from src.config import settings
+from src.config import build_ytdlp_options, settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,6 @@ _inject_cuda_path()
 
 import yt_dlp
 
-from src.config import settings
 from src.models import SubtitleEntry
 
 _PROJECT_ROOT = Path(__file__).parent.parent
@@ -136,22 +135,25 @@ def download_audio(url: str, progress_cb=None) -> Path:
             except ValueError:
                 pass
 
-    # Bilibili cookie support for yt-dlp audio download
-    bili_opts = {}
-    if settings.bilibili_cookies:
-        cookie_path = Path(settings.bilibili_cookies)
-        if cookie_path.exists():
-            bili_opts["cookiefile"] = str(cookie_path.resolve())
-        bili_opts.setdefault("extractor_args", {"bilibili": {"skip_login": ["true"]}})
-
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
+    extra: dict = {
         "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "outtmpl": str(out),
         "progress_hooks": [hook],
-        **bili_opts,
     }
+
+    # YouTube: android client works around HTTP 403 (tv_embedded removed in newer yt-dlp)
+    if "youtube.com/watch" in url or "youtu.be/" in url:
+        extra["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+
+    # Bilibili cookie support for yt-dlp audio download
+    if settings.bilibili_cookies:
+        cookie_path = Path(settings.bilibili_cookies)
+        if cookie_path.exists():
+            extra["cookiefile"] = str(cookie_path.resolve())
+        extra.setdefault("extractor_args", {})
+        extra["extractor_args"]["bilibili"] = {"skip_login": ["true"]}
+
+    opts = build_ytdlp_options(extra)
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.extract_info(url, download=True)
 

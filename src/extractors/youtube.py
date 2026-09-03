@@ -8,6 +8,7 @@ from youtube_transcript_api._errors import (
     VideoUnavailable,
 )
 
+from src.config import build_ytdlp_options
 from src.extractors.base import BaseExtractor, clean_url
 from src.models import SubtitleEntry, VideoMeta
 
@@ -18,12 +19,23 @@ _YT_PLAYLIST_PATTERN = re.compile(
     r"(?:https?://)?(?:www\.)?youtube\.com/playlist\?list=([\w-]+)"
 )
 
+# Use the android client: tv_embedded was removed from newer yt-dlp versions and
+# silently falls back to default, which YouTube now rejects with HTTP 403.
+_YTDLP_YT_EXTRACTOR_ARGS = {"youtube": {"player_client": ["android"]}}
+
+
+def _youtube_ytdlp_options(extra: dict | None = None) -> dict:
+    base: dict = {"extractor_args": _YTDLP_YT_EXTRACTOR_ARGS}
+    if extra:
+        base.update(extra)
+    return build_ytdlp_options(base)
+
 
 def extract_playlist_urls(url: str) -> list[str]:
     """Expand a YouTube playlist URL into individual video URLs."""
     if not _YT_PLAYLIST_PATTERN.search(url):
         return []
-    with yt_dlp.YoutubeDL({"quiet": True, "extract_flat": True}) as ydl:
+    with yt_dlp.YoutubeDL(_youtube_ytdlp_options({"extract_flat": True})) as ydl:
         info = ydl.extract_info(url, download=False)
         entries = info.get("entries", [])
         return [
@@ -60,7 +72,7 @@ class YouTubeExtractor(BaseExtractor):
         return m.group(1)
 
     def _fetch_info(self, url: str) -> dict:
-        opts = {"quiet": True, "no_warnings": True, "extract_flat": False}
+        opts = _youtube_ytdlp_options({"extract_flat": False})
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=False)
 
@@ -131,15 +143,13 @@ class YouTubeExtractor(BaseExtractor):
 
     def _fetch_subs_via_ytdlp(self, video_id: str) -> list[dict]:
         url = f"https://www.youtube.com/watch?v={video_id}"
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
+        opts = _youtube_ytdlp_options({
             "writesubtitles": True,
             "writeautomaticsub": True,
             "subtitleslangs": ["en", "zh-Hans", "zh", "ja", "ko"],
             "skip_download": True,
             "outtmpl": "-",
-        }
+        })
         entries: list[dict] = []
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)

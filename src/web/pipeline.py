@@ -13,7 +13,7 @@ from src.analyzers import extract_keypoints, summarize
 from src.analyzers.summarizer import extract_concepts
 from src.cache import cache
 from src.classify import classify
-from src.config import settings
+from src.config import build_ytdlp_options, settings
 from src.extractors import get_extractor
 from src.extractors.base import clean_url
 from src.models import AnalysisResult, SubtitleEntry, VideoMeta
@@ -99,7 +99,11 @@ async def run_pipeline(url: str, task_id: str, parent_dir: str = "") -> bool:
             thumb = meta.thumbnail
         except Exception as e:
             push(task_id, "status", f"API 提取失败 ({e})，改用语音识别...")
-            opts = {"quiet": True, "no_warnings": True, "extract_flat": False, **_BILI_YTDLP_OPTS}
+            extra = {"extract_flat": False, **_BILI_YTDLP_OPTS}
+            extra["extractor_args"] = dict(extra.get("extractor_args", {}))
+            if "youtube.com/watch" in url or "youtu.be/" in url:
+                extra["extractor_args"]["youtube"] = {"player_client": ["android"]}
+            opts = build_ytdlp_options(extra)
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)

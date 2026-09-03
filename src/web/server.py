@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.cache import cache
-from src.config import settings
+from src.config import build_ytdlp_options, settings
 from src.output.markdown import _OUTPUT_DIR
 from src.rag.chat import ask as rag_ask, global_ask
 from src.web.history import router as history_router, scan_dirs
@@ -74,9 +74,11 @@ async def analyze_playlist(url: str = Query(...)):
     # Get author for parent folder naming. Bilibili provides it directly;
     # YouTube needs yt-dlp fallback.
     if not author:
-        import yt_dlp as _yt_dlp
         try:
-            with _yt_dlp.YoutubeDL({"quiet": True, "extract_flat": False}) as ydl:
+            extra = {"extract_flat": False}
+            if "youtube.com/playlist" in url or "youtube.com/watch" in url or "youtu.be/" in url:
+                extra["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+            with yt_dlp.YoutubeDL(build_ytdlp_options(extra)) as ydl:
                 pl_info = await asyncio.to_thread(ydl.extract_info, url, download=False)
             uploader = pl_info.get("uploader", "") or pl_info.get("channel", "") or ""
             author = re.sub(r"[\\/:*?\"<>|' ]", "_", uploader)[:30]

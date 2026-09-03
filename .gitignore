@@ -24,12 +24,14 @@ Thumbs.db
 # API keys & config
 .env
 !.env.example
+youtube_cookies.txt
 
 # Runtime data
 .cache/
 .chromadb/
 /output/
 tempvideo/
+test_audio
 
 # Testing
 .pytest_cache/
